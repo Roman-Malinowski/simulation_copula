@@ -7,7 +7,7 @@ import numpy as np
 def possibility_df(poss_dist: dict) -> pd.DataFrame:
     """
     Create a dataframe containing the possiblity measure and necessity measure computed from a possibility distribution.
-     Possibility and necessity measures are columns and events are rows. Do not compute the empty set and the full set.
+     Possibility and necessity measures are columns and events are rows. Do not compute the empty set.
     :param poss_dist: A dictionary representing a possibility distribution. Keys are atoms and values are the value of
     the possibility distribution
     :return: panda dataframe
@@ -17,7 +17,7 @@ def possibility_df(poss_dist: dict) -> pd.DataFrame:
             raise IndexError("Cannot use ',' in the dictionary keys")
 
     coord = list()
-    for k in range(1, len(poss_dist)):
+    for k in range(1, len(poss_dist) + 1):
         coord += [list(j) for j in itertools.combinations(poss_dist.keys(), k)]
 
     possibility = pi_measure(coord, poss_dist)
@@ -30,7 +30,7 @@ def pi_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     """
     Compute the possibility measure for a list of events and a possibility distribution
     :param coord: a list of events. Should not include the empty set.
-    Example [['x_1'], ['x_2'], ['x_3'], ['x_1', 'x_2'], ['x_1', 'x_3'], ['x_2', 'x_3']]
+    Example [['x_1'], ['x_2'], ['x_3'], ['x_1', 'x_2'], ['x_1', 'x_3'], ['x_2', 'x_3'], ['x_1', 'x_2', 'x_3']]
     :param poss_dist: A dictionary representing a possibility distribution. Keys are atoms and values are the value of
     the possibility distribution
     :return: A panda DataFrame. Indexes are the events of coord, column is "possibility"
@@ -45,7 +45,7 @@ def nec_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     """
 
     :param coord: a list of events. Should not include the empty set.
-    Example [['x_1'], ['x_2'], ['x_3'], ['x_1', 'x_2'], ['x_1', 'x_3'], ['x_2', 'x_3']]
+    Example [['x_1'], ['x_2'], ['x_3'], ['x_1', 'x_2'], ['x_1', 'x_3'], ['x_2', 'x_3'], ['x_1', 'x_2', 'x_3']]
     :param poss_dist: A dictionary representing a possibility distribution. Keys are atoms and values are the value of
     the possibility distribution
     :return: A panda DataFrame. Indexes are the events of coord, column is "possibility"
@@ -53,7 +53,10 @@ def nec_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     nec_ = dict()
     for k in coord:
         k_c = [a for a in poss_dist.keys() if a not in k]
-        nec_[",".join(k)] = 1 - max([poss_dist[a] for a in k_c])
+        if not k_c:
+            nec_[",".join(k)] = 1
+        else:
+            nec_[",".join(k)] = 1 - max([poss_dist[a] for a in k_c])
     return pd.DataFrame(data=nec_.values(), index=nec_.keys(), columns=["necessity"])
 
 
@@ -90,10 +93,12 @@ def generate_proba(pos_df: pd.DataFrame, step=0.1) -> pd.DataFrame:
 
 def generate_cdf(proba_df: pd.DataFrame) -> pd.DataFrame:
     """
+    CAREFUL: The order of elements for cumulative distribution will be the order of columns. If created from a
+    dictionary, it will be alphabetical order.
     Compute the cumulated distribution function (CDF) from a dataframe containing probability mass distributions.
     :param proba_df: a dataframe containing probability mass distributions defined as in generate_proba()
     :return: A panda dataframe. Each row correspond to a CDF. Columns are cumulated events.
-    Example: pd.DataFrame(data=[[0., 0.5, .1], [0.2, 0.4, 1.]], columns=[["x_1"], ["x_1,x_2"], ["x_1,x_2,x_2"]])
+    Example: pd.DataFrame(data=[[0., 0.5, .1], [0.2, 0.4, 1.]], columns=[["x_1"], ["x_1,x_2"], ["x_1,x_2,x_3"]])
     """
     atoms = list(proba_df.columns)
     if "Index X" in atoms:
@@ -137,11 +142,11 @@ def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, 
     """
     In order to have every combination possible for rows of proba_x_ and proba_y_, it is necessary to duplicate each
     rows. Example:
-    proba_x_ = [[a], [b], [c]]
-    proba_y_ = [[e], [f]]
+    proba_x_ = [[a], [b], [c]], columns=["x"]
+    proba_y_ = [[e], [f]], columns=["y"]
     it returns
-    proba_x_expanded = [[a], [a], [b], [b], [c], [c]]
-    proba_y_expanded = [[e], [e], [f], [f]]
+    proba_x_expanded = [[a, 0], [a, 0], [b, 1], [b, 1], [c, 1], [c, 1]], columns=[]
+    proba_y_expanded = [[e, 0], [f, 1], [e, 0], [f, 1], [e, 0], [f, 1]]
     :param proba_x_: A dataframe with n rows and k columns
     :param proba_y_: A dataframe with m rows and j columns
     :return: two dataframes with n*m rows and k+1 and j+1 columns respectively. A column containing the original index
@@ -185,8 +190,7 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
     proba in the proba_y_)
     p_xy columns (pd.MultiIndex) are the cartesian products of events.
     CAREFUL: proba_x_ and proba_y_ columns correspond to atoms. But for the joint probability, we compute the mass over
-    all events and not just atoms (except for the empty set and cartesian products containing one of the full set of
-    the marginals).
+    all events and not just atoms (except for the empty set).
     """
     atoms_x = list(proba_x_.columns)
     atoms_y = list(proba_y_.columns)
@@ -227,8 +231,8 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
 
     # Computing elements that are combinations of 2D-atoms
     coord = list()
-    for k_x in range(1, len(atoms_x)):
-        for k_y in range(1, len(atoms_y)):
+    for k_x in range(1, len(atoms_x)+1):
+        for k_y in range(1, len(atoms_y)+1):
             if k_x == k_y == 1:
                 continue
             coord += [e for e in itertools.product(itertools.combinations(atoms_x, k_x),
@@ -262,12 +266,36 @@ def compute_joint_with_sklar(possibility_df_x: pd.DataFrame, possibility_df_y: p
 
 def compare_robust_to_sklar(joint_necessity: pd.DataFrame, joint_proba: pd.DataFrame) -> pd.DataFrame:
     """
-
-    :param joint_necessity:
-    :param joint_proba:
-    :return:
+    Creates a DataFrame for comparing the sampled joint probabilities and the joint necessity
+    :param joint_necessity: pd.DataFrame. A DataFrame containing all joint necessities. Same structure as the one
+    obtained with compute_joint_with_sklar()
+    :param joint_proba: pd.DataFrame. A DataFrame containing all the samples probabilities. Same structure as the one
+    obtained with generate_joint_proba()
+    :return: pd.DataFrame. A DataFrame whose columns are a pd.MultiIndex obtain from the product of all the events
+    on X and Y. Its rows are "Nec", "Min", "Argmin", "P_X atoms", "P_Y atoms".
+    "Nec": the necessity for the event
+    "Min": the minimum value of the sampled joint probabilities for the event
+    "Argmin": the MultiIndex value for the minimal sampled probability P_min for the event
+    "P_X atoms" contains a tuple with the marginal of P_min over the atoms of X (to find manually the results)
+    "P_Y atoms" contains a tuple with the marginal of P_min over the atoms of Y (to find manually the results)
     """
-    min_on_events = joint_proba.min(axis=0)
+    atoms_x = np.unique([k[0] for k in joint_proba.columns if ',' not in k[0]])
+    atoms_y = np.unique([k[1] for k in joint_proba.columns if ',' not in k[1]])
+
+    df_compare = pd.DataFrame(columns=joint_proba.columns, index=["Nec", "Min", "Argmin", "P_X atoms", "P_Y atoms"])
+    for col in df_compare.columns:
+        idx_min = joint_proba.loc[:, col].squeeze().idxmin(axis=0)  # Only keeps the first occurrence
+        min_val = joint_proba.loc[:, col].min(axis=0)
+        df_compare.loc[("Min", "Argmin"), col] = np.array([min_val, idx_min], dtype=object)
+
+        df_compare.loc["Nec", col] = joint_necessity.loc[0, col]
+
+        # As C(u,1) = u and C(1,v), we can retrieve marginals easily this way.
+        # But there will be more computation errors!
+        df_compare.loc["P_X atoms", col] = tuple([joint_proba.loc[idx_min, (k, ",".join(atoms_y))] for k in atoms_x])
+        df_compare.loc["P_Y atoms", col] = tuple([joint_proba.loc[idx_min, (",".join(atoms_x), k)] for k in atoms_y])
+
+    return df_compare
 
 
 if __name__ == '__main__':
