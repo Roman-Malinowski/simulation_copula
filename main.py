@@ -96,8 +96,15 @@ def generate_cdf(proba_df: pd.DataFrame) -> pd.DataFrame:
     Example: pd.DataFrame(data=[[0., 0.5, .1], [0.2, 0.4, 1.]], columns=[["x_1"], ["x_1,x_2"], ["x_1,x_2,x_2"]])
     """
     atoms = list(proba_df.columns)
+    if "Index X" in atoms:
+        print("Ignoring 'Index X' in CDF computation")
+        atoms.remove("Index X")
+    if "Index Y" in atoms:
+        print("Ignoring 'Index Y' in CDF computation")
+        atoms.remove("Index Y")
+
     cdf_columns = [",".join(atoms[:k + 1]) for k in range(len(atoms))]
-    cdf_ = proba_df.cumsum(axis=1)
+    cdf_ = proba_df.loc[:, atoms].cumsum(axis=1)
     cdf_.columns = cdf_columns
     return cdf_
 
@@ -123,7 +130,7 @@ def lukaciewicz(u: float, v: float) -> float:
     """
     if 0. > u or 1. < u or 0 > v or 1 < v:
         raise ValueError("u and v should be between 1 and 0. u=%s ; b=%s" % (u, v))
-    return max(0, u + v - 1)
+    return max(0., u + v - 1)
 
 
 def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
@@ -137,19 +144,30 @@ def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, 
     proba_y_expanded = [[e], [e], [f], [f]]
     :param proba_x_: A dataframe with n rows and k columns
     :param proba_y_: A dataframe with m rows and j columns
-    :return: two dataframes with n*m rows and k and j columns respectively
+    :return: two dataframes with n*m rows and k+1 and j+1 columns respectively. A column containing the original index
+    is added
     """
     n_x, n_y = proba_x_.shape[0], proba_y_.shape[0]
     index_x, index_y = np.array(proba_x_.index), np.array(proba_y_.index)
 
-    proba_x_expanded = proba_x_.set_index(index_x*n_y)
+    if "Index X" in proba_x_.columns:
+        raise KeyError("'Index X' cannot be the name of a column in the probability mass samples")
+    if "Index Y" in proba_y_.columns:
+        raise KeyError("'Index Y' cannot be the name of a column in the probability mass samples")
+
+    proba_x_.loc[:, "Index X"] = index_x
+    proba_x_expanded = proba_x_.set_index(index_x * n_y)
+
+    proba_y_.loc[:, "Index Y"] = index_y
     proba_y_expanded = proba_y_.copy()
 
     for k in range(1, n_y):
         proba_x_expanded = pd.concat([proba_x_expanded, proba_x_.set_index(index_x*n_y + k)])
     proba_x_expanded.sort_index(inplace=True)
+
     for j in range(1, n_x):
-        proba_y_expanded = pd.concat([proba_y_expanded, proba_y_], ignore_index=True)
+        proba_y_expanded = pd.concat([proba_y_expanded, proba_y_])
+    proba_y_expanded.reset_index(inplace=True, drop=True)
 
     return proba_x_expanded, proba_y_expanded
 
@@ -162,13 +180,17 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
     :param proba_x_: a panda DataFrame representing probability mass distributions (rows) as given by generate_proba()
     :param proba_y_: a panda DataFrame representing probability mass distributions (rows) as given by generate_proba()
     :param copula: a python Function taking two arguments (float) and returning the copula computed on those floats
-    :return: a panda DataFrame. Each row corresponds to a joint probability mass distribution. Columns (multiindex) are
-    the cartesian products of events. CAREFUL: proba_x_ and proba_y_ columns correspond to atoms. But for the
-    joint probability, we compute the mass over all events and not just atoms (except for the empty set and cartesian
-    products containing one of the full set of the marginals).
+    :return: a panda DataFrame p_xy. Each row corresponds to a joint probability mass distribution. The index of p_xy
+    is a pd.MultiIndex (first one corresponds to the index of the X proba in proba_x_, second corresponds to the Y
+    proba in the proba_y_)
+    p_xy columns (pd.MultiIndex) are the cartesian products of events.
+    CAREFUL: proba_x_ and proba_y_ columns correspond to atoms. But for the joint probability, we compute the mass over
+    all events and not just atoms (except for the empty set and cartesian products containing one of the full set of
+    the marginals).
     """
     atoms_x = list(proba_x_.columns)
     atoms_y = list(proba_y_.columns)
+
     indexes = pd.MultiIndex.from_product([atoms_x, atoms_y], names=["X", "Y"])
 
     # Creating a dictionary containing the cumulate event right before and containing each element
@@ -191,6 +213,7 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
     cdf_y.loc[:, ""] = 0.
 
     p_xy = pd.DataFrame(columns=indexes)
+
     for x_, y_ in indexes:
         x_inf, x_sup = x_events[x_]
         y_inf, y_sup = y_events[y_]
@@ -198,6 +221,9 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
                             cdf_x.loc[:, x_inf].combine(cdf_y.loc[:, y_inf], copula) - \
                             cdf_x.loc[:, x_inf].combine(cdf_y.loc[:, y_sup], copula) - \
                             cdf_x.loc[:, x_sup].combine(cdf_y.loc[:, y_inf], copula)
+
+    # Setting the index to be able to find where each joint proba comes from
+    p_xy.set_index(pd.MultiIndex.from_arrays([proba_x_expanded["Index X"], proba_y_expanded["Index Y"]]), inplace=True)
 
     # Computing elements that are combinations of 2D-atoms
     coord = list()
@@ -215,16 +241,48 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
     return p_xy
 
 
+def compute_joint_with_sklar(possibility_df_x: pd.DataFrame, possibility_df_y: pd.DataFrame,
+                             copula: types.FunctionType) -> pd.DataFrame:
+    """
+    Compute the joint necessity using Sklar's theorem applied to necessity measures. Nec_{XY} = C(Nec_X, Nec_Y)
+    :param possibility_df_x: a possibility/necessity dataframe defined as in possibility_df()
+    :param possibility_df_y: a possibility/necessity dataframe defined as in possibility_df()
+    :param copula: a python Function taking two arguments (float) and returning the copula computed on those floats
+    :return: a panda DataFrame whose columns are the cartesian product of
+    possibility_df_x.index and possibility_df_y.index. The DataFrame only has one row, corresponding to the value of
+    the joint necessity measure
+    """
+    index_joint = pd.MultiIndex.from_product([possibility_df_x.index, possibility_df_y.index], names=["X", "Y"])
+    joint_df = pd.DataFrame(columns=index_joint)
+
+    for x_, y_ in index_joint:
+        joint_df.loc[0, (x_, y_)] = copula(possibility_df_x.loc[x_, "necessity"], possibility_df_y.loc[y_, "necessity"])
+    return joint_df
+
+
+def compare_robust_to_sklar(joint_necessity: pd.DataFrame, joint_proba: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    :param joint_necessity:
+    :param joint_proba:
+    :return:
+    """
+    min_on_events = joint_proba.min(axis=0)
+
+
 if __name__ == '__main__':
     possibility_distribution_x = dict(x_1=0.5, x_2=1, x_3=0.3)
-    pos_set_x = possibility_df(possibility_distribution_x)
-    proba_x = generate_proba(pos_set_x)
+    pos_df_x = possibility_df(possibility_distribution_x)
+    proba_x = generate_proba(pos_df_x)
 
     possibility_distribution_y = dict(y_1=1, y_2=0.2, y_3=0.6)
-    pos_set_y = possibility_df(possibility_distribution_y)
-    proba_y = generate_proba(pos_set_y)
+    pos_df_y = possibility_df(possibility_distribution_y)
+    proba_y = generate_proba(pos_df_y)
 
+    """proba_x = pd.DataFrame(data=np.array([[0.1, 0.7, 0.2], [0.5, 0.5, 0.]]), columns=["x_1", "x_2", "x_3"])
+    proba_y = pd.DataFrame(data=np.array([[0.2, 0.8], [0.6, 0.4], [0.0, 1]]), columns=["y_1", "y_2"])"""
     proba_join = generate_joint_proba(proba_x, proba_y, min_copula)
     proba_join = proba_join.round(decimals=10)
+    proba_join.to_csv("test.csv")
 
     print(proba_join)
