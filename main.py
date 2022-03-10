@@ -2,9 +2,11 @@ import types
 import pandas as pd
 import itertools
 import numpy as np
+import os.path as op
+import warnings
 
 
-def possibility_df(poss_dist: dict) -> pd.DataFrame:
+def generate_pi_nec_df(poss_dist: dict) -> pd.DataFrame:
     """
     Create a dataframe containing the possiblity measure and necessity measure computed from a possibility distribution.
      Possibility and necessity measures are columns and events are rows. Do not compute the empty set.
@@ -20,13 +22,13 @@ def possibility_df(poss_dist: dict) -> pd.DataFrame:
     for k in range(1, len(poss_dist) + 1):
         coord += [list(j) for j in itertools.combinations(poss_dist.keys(), k)]
 
-    possibility = pi_measure(coord, poss_dist)
+    possibility = generate_pi_measure(coord, poss_dist)
     necessity = nec_measure(coord, poss_dist)
 
     return possibility.join(necessity)
 
 
-def pi_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
+def generate_pi_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     """
     Compute the possibility measure for a list of events and a possibility distribution
     :param coord: a list of events. Should not include the empty set.
@@ -41,7 +43,7 @@ def pi_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     return pd.DataFrame(data=pi_.values(), index=pi_.keys(), columns=["possibility"])
 
 
-def nec_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
+def generate_nec_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     """
 
     :param coord: a list of events. Should not include the empty set.
@@ -60,13 +62,14 @@ def nec_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
     return pd.DataFrame(data=nec_.values(), index=nec_.keys(), columns=["necessity"])
 
 
-def generate_proba(pos_df: pd.DataFrame, step=0.1) -> pd.DataFrame:
+def generate_sampled_proba_measures(pos_df: pd.DataFrame, step=0.1) -> pd.DataFrame:
+    # TODO modify this function by using with itertools.product
     """
     Generate samples of probability given a possibility/necessity dataframe.
     For each atom of pos_df.index, we compute the range of possible probability values in [necessity, possibility]
     with a given step. We then suppress all the probability distributions that do not add to 1 (with an error of
     step*len(atoms)/100)
-    :param pos_df: a possibility/necessity dataframe defined as in possibility_df()
+    :param pos_df: a possibility/necessity dataframe defined as in generate_pi_nec_df()
     :param step: The step used for sampling probabilities. Have an impact on the error tolerance.
     :return: A panda DataFrame. Each row correspond to a probability mass distribution. Each column correspond to an
     atom.
@@ -91,21 +94,19 @@ def generate_proba(pos_df: pd.DataFrame, step=0.1) -> pd.DataFrame:
     return pd.DataFrame(data=p_tot, columns=atoms)
 
 
-def generate_cdf(proba_df: pd.DataFrame) -> pd.DataFrame:
+def generate_sampled_cdf(proba_df: pd.DataFrame) -> pd.DataFrame:
     """
     CAREFUL: The order of elements for cumulative distribution will be the order of columns. If created from a
     dictionary, it will be alphabetical order.
     Compute the cumulated distribution function (CDF) from a dataframe containing probability mass distributions.
-    :param proba_df: a dataframe containing probability mass distributions defined as in generate_proba()
+    :param proba_df: a dataframe containing probability mass distributions defined as in generate_sampled_proba_measures()
     :return: A panda dataframe. Each row correspond to a CDF. Columns are cumulated events.
     Example: pd.DataFrame(data=[[0., 0.5, .1], [0.2, 0.4, 1.]], columns=[["x_1"], ["x_1,x_2"], ["x_1,x_2,x_3"]])
     """
     atoms = list(proba_df.columns)
     if "Index X" in atoms:
-        print("Ignoring 'Index X' in CDF computation")
         atoms.remove("Index X")
     if "Index Y" in atoms:
-        print("Ignoring 'Index Y' in CDF computation")
         atoms.remove("Index Y")
 
     cdf_columns = [",".join(atoms[:k + 1]) for k in range(len(atoms))]
@@ -122,11 +123,15 @@ def min_copula(u: float, v: float) -> float:
     :return: a float between 0 and 1 corresponding to C(u,v)
     """
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        raise ValueError("u and v should be between 1 and 0. u=%s ; b=%s" % (u, v))
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\Cropping the values." % (u, v), UserWarning)
+        u = max(0., u)
+        u = min(1., u)
+        v = max(0., v)
+        v = min(1., v)
     return min(u, v)
 
 
-def lukaciewicz(u: float, v: float) -> float:
+def lukaciewicz_copula(u: float, v: float) -> float:
     """
     The lukaciewicz copula
     :param u: a float between 0 and 1
@@ -139,6 +144,7 @@ def lukaciewicz(u: float, v: float) -> float:
 
 
 def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
+    # TODO redo this function using itertools.product
     """
     In order to have every combination possible for rows of proba_x_ and proba_y_, it is necessary to duplicate each
     rows. Example:
@@ -177,13 +183,13 @@ def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, 
     return proba_x_expanded, proba_y_expanded
 
 
-def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula: types.FunctionType) -> pd.DataFrame:
+def generate_joint_proba_measures(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula: types.FunctionType) -> pd.DataFrame:
     """
     Compute the joint probabilities from two marginal probabilities under a given copula. Using the formula:
     P_{XY}(x_i, y_i) = C(F_X(x_i), F_Y(y_i)) + C(F_X(x_{i-1}), F_Y(y_{i-1}))
     - C(F_X(x_i), F_Y(y_{i-1})) - C(F_X(x_{i-1}), F_Y(y_i))
-    :param proba_x_: a panda DataFrame representing probability mass distributions (rows) as given by generate_proba()
-    :param proba_y_: a panda DataFrame representing probability mass distributions (rows) as given by generate_proba()
+    :param proba_x_: a panda DataFrame representing probability mass distributions (rows) as given by generate_sampled_proba_measures()
+    :param proba_y_: a panda DataFrame representing probability mass distributions (rows) as given by generate_sampled_proba_measures()
     :param copula: a python Function taking two arguments (float) and returning the copula computed on those floats
     :return: a panda DataFrame p_xy. Each row corresponds to a joint probability mass distribution. The index of p_xy
     is a pd.MultiIndex (first one corresponds to the index of the X proba in proba_x_, second corresponds to the Y
@@ -209,8 +215,8 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
     # Expand the lines of the proba to make it more handy to compute every combinations
     proba_x_expanded, proba_y_expanded = expand_df(proba_x_, proba_y_)
 
-    cdf_x = generate_cdf(proba_x_expanded)
-    cdf_y = generate_cdf(proba_y_expanded)
+    cdf_x = generate_sampled_cdf(proba_x_expanded)
+    cdf_y = generate_sampled_cdf(proba_y_expanded)
 
     # Adding an empty column so that the index before "x_1" is defined
     cdf_x.loc[:, ""] = 0.
@@ -245,12 +251,12 @@ def generate_joint_proba(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame, copula:
     return p_xy
 
 
-def compute_joint_with_sklar(possibility_df_x: pd.DataFrame, possibility_df_y: pd.DataFrame,
-                             copula: types.FunctionType) -> pd.DataFrame:
+def generate_joint_necessity_with_sklar(possibility_df_x: pd.DataFrame, possibility_df_y: pd.DataFrame,
+                                        copula: types.FunctionType) -> pd.DataFrame:
     """
     Compute the joint necessity using Sklar's theorem applied to necessity measures. Nec_{XY} = C(Nec_X, Nec_Y)
-    :param possibility_df_x: a possibility/necessity dataframe defined as in possibility_df()
-    :param possibility_df_y: a possibility/necessity dataframe defined as in possibility_df()
+    :param possibility_df_x: a possibility/necessity dataframe defined as in generate_pi_nec_df()
+    :param possibility_df_y: a possibility/necessity dataframe defined as in generate_pi_nec_df()
     :param copula: a python Function taking two arguments (float) and returning the copula computed on those floats
     :return: a panda DataFrame whose columns are the cartesian product of
     possibility_df_x.index and possibility_df_y.index. The DataFrame only has one row, corresponding to the value of
@@ -268,9 +274,9 @@ def compare_robust_to_sklar(joint_necessity: pd.DataFrame, joint_proba: pd.DataF
     """
     Creates a DataFrame for comparing the sampled joint probabilities and the joint necessity
     :param joint_necessity: pd.DataFrame. A DataFrame containing all joint necessities. Same structure as the one
-    obtained with compute_joint_with_sklar()
+    obtained with generate_joint_necessity_with_sklar()
     :param joint_proba: pd.DataFrame. A DataFrame containing all the samples probabilities. Same structure as the one
-    obtained with generate_joint_proba()
+    obtained with generate_joint_proba_measures()
     :return: pd.DataFrame. A DataFrame whose columns are a pd.MultiIndex obtain from the product of all the events
     on X and Y. Its rows are "Nec", "Min", "Argmin", "P_X atoms", "P_Y atoms".
     "Nec": the necessity for the event
@@ -284,8 +290,13 @@ def compare_robust_to_sklar(joint_necessity: pd.DataFrame, joint_proba: pd.DataF
 
     df_compare = pd.DataFrame(columns=joint_proba.columns, index=["Nec", "Min", "Argmin", "P_X atoms", "P_Y atoms"])
     for col in df_compare.columns:
-        idx_min = joint_proba.loc[:, col].squeeze().idxmin(axis=0)  # Only keeps the first occurrence
-        min_val = joint_proba.loc[:, col].min(axis=0)
+        if joint_proba.shape[0] == 1:
+            # loc[:, col] returns a float, not a Dataframe. squeeze() will generate AttributeError
+            idx_min = joint_proba.index[0]
+            min_val = joint_proba.loc[:, col].min(axis=0)
+        else:
+            idx_min = joint_proba.loc[:, col].squeeze().idxmin(axis=0)  # Only keeps the first occurrence
+            min_val = joint_proba.loc[:, col].min(axis=0)
         df_compare.loc[("Min", "Argmin"), col] = np.array([min_val, idx_min], dtype=object)
 
         df_compare.loc["Nec", col] = joint_necessity.loc[0, col]
@@ -298,19 +309,80 @@ def compare_robust_to_sklar(joint_necessity: pd.DataFrame, joint_proba: pd.DataF
     return df_compare
 
 
+def create_differences_df(poss_distrib_x: dict, poss_distrib_y: dict, copula: types.FunctionType)\
+        -> (bool, pd.DataFrame):
+    pos_df_x_ = generate_pi_nec_df(poss_distrib_x)
+    proba_x_ = generate_sampled_proba_measures(pos_df_x_)
+
+    pos_df_y_ = generate_pi_nec_df(poss_distrib_y)
+    proba_y_ = generate_sampled_proba_measures(pos_df_y_)
+
+    proba_join_ = generate_joint_proba_measures(proba_x_, proba_y_, copula)
+    proba_join_ = proba_join_.round(decimals=10)
+    nec_sklar = generate_joint_necessity_with_sklar(pos_df_x_, pos_df_y_, copula)
+    nec_sklar = nec_sklar.round(decimals=10)
+
+    df = compare_robust_to_sklar(nec_sklar, proba_join_)
+
+    return df.loc[:, df.loc["Min", :] - df.loc["Nec", :] > float(1e-5)].empty, df
+
+
+def sample_possibility_distribution(set_values: list, range_of_values: list) -> list:
+    """
+    Create a list of possible possibility distributions given a set and acceptable values
+    of the possibility distribution.
+    :param set_values: list of strings. Example: set_values = ["x_1", "x_2", "x_3"]
+    :param range_of_values: list of floats between 0 and 1. Example [0.0, 0.1, 0.5, 0.9]
+    :return: list of tuple. Each tuple has len(set_values) elements corresponding to the value of the possibility
+    distribution for the element.
+    """
+    n_ = len(set_values)
+    list_of_pi_ = list()
+    for i in range(1, n_ + 1):
+        ones_ = list(itertools.combinations(set_values, i))
+        for one_ in ones_:
+            range_ = []  # Will contain all the possible values for each x_i
+            for x in set_values:
+                if x in one_:
+                    range_ += [[1.]]
+                else:
+                    range_ += [range_of_values]
+            # Cartesian product of all possible values
+            list_of_pi_ += list(itertools.product(*range_))
+
+    return list_of_pi_
+
+
+def sample_joint_possibilities_distributions(max_x: int, max_y: int, copula: types.FunctionType, folder: str= "", step: float=0.1) -> None:
+    # Creating all possibility distributions possible
+    save_number = 0
+    decimal_to_round = int(-np.floor(np.log10(step)))
+    range_of_values = list(np.around(np.arange(0, 1, step), decimal_to_round))  # np.arange creates small errors
+
+    # Changing the number of elements of X
+    for n_x in range(2, max_x + 1):
+        X = ["x_%s" % i for i in range(1, n_x + 1)]
+        list_of_pi_x = sample_possibility_distribution(X, range_of_values)
+
+        # Doing the same for Y
+        for n_y in range(2, max_y + 1):
+            Y = ["y_%s" % i for i in range(1, n_y + 1)]
+            list_of_pi_y = sample_possibility_distribution(Y, range_of_values)
+
+            for p_x in list_of_pi_x:
+                poss_distib_x = dict(zip(X, p_x))
+                for p_y in list_of_pi_y:
+                    poss_distib_y = dict(zip(Y, p_y))
+
+                    empty, df = create_differences_df(poss_distib_x, poss_distib_y, copula)
+                    if not empty:
+                        df.to_csv(op.join(folder, "df_%s.csv" % save_number))
+                        print("Saved df_%s.csv" % save_number)
+                        save_number += 1
+
+    return
+
+
 if __name__ == '__main__':
-    possibility_distribution_x = dict(x_1=0.5, x_2=1, x_3=0.3)
-    pos_df_x = possibility_df(possibility_distribution_x)
-    proba_x = generate_proba(pos_df_x)
-
-    possibility_distribution_y = dict(y_1=1, y_2=0.2, y_3=0.6)
-    pos_df_y = possibility_df(possibility_distribution_y)
-    proba_y = generate_proba(pos_df_y)
-
-    """proba_x = pd.DataFrame(data=np.array([[0.1, 0.7, 0.2], [0.5, 0.5, 0.]]), columns=["x_1", "x_2", "x_3"])
-    proba_y = pd.DataFrame(data=np.array([[0.2, 0.8], [0.6, 0.4], [0.0, 1]]), columns=["y_1", "y_2"])"""
-    proba_join = generate_joint_proba(proba_x, proba_y, min_copula)
-    proba_join = proba_join.round(decimals=10)
-    proba_join.to_csv("test.csv")
-
-    print(proba_join)
+    warnings.filterwarnings('ignore')
+    sample_joint_possibilities_distributions(5, 5, min_copula, "csv_files")
