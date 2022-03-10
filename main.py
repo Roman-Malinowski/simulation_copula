@@ -63,7 +63,6 @@ def generate_nec_measure(coord: list, poss_dist: dict) -> pd.DataFrame:
 
 
 def generate_sampled_proba_measures(pos_df: pd.DataFrame, step=0.1) -> pd.DataFrame:
-    # TODO modify this function by using with itertools.product
     """
     Generate samples of probability given a possibility/necessity dataframe.
     For each atom of pos_df.index, we compute the range of possible probability values in [necessity, possibility]
@@ -79,15 +78,8 @@ def generate_sampled_proba_measures(pos_df: pd.DataFrame, step=0.1) -> pd.DataFr
     # Range of probability on those atoms
     ranges = [np.append(np.arange(pos_df.loc[a, "necessity"], pos_df.loc[a, "possibility"], step),
                         [pos_df.loc[a, "possibility"]]) for a in atoms]
-    n_lines = np.prod([len(x) for x in ranges])
-    p_tot = np.zeros((n_lines, len(atoms)))
 
-    n_occur = n_lines
-    n_period = 1
-    for k in range(len(atoms)):
-        n_occur /= len(ranges[k])
-        p_tot[:, k] = np.array([[i] * int(n_occur) for i in ranges[k]] * int(n_period)).flatten()
-        n_period *= len(ranges[k])
+    p_tot = np.array(list(itertools.product(*ranges)))
 
     # Removing proba that do not add to one
     p_tot = p_tot[np.abs(1 - p_tot.sum(axis=1)) <= step * len(atoms) / 100, :]
@@ -123,7 +115,8 @@ def min_copula(u: float, v: float) -> float:
     :return: a float between 0 and 1 corresponding to C(u,v)
     """
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
+                      "Cropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -144,21 +137,19 @@ def lukaciewicz_copula(u: float, v: float) -> float:
 
 
 def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
-    # TODO redo this function using itertools.product
     """
     In order to have every combination possible for rows of proba_x_ and proba_y_, it is necessary to duplicate each
     rows. Example:
     proba_x_ = [[a], [b], [c]], columns=["x"]
     proba_y_ = [[e], [f]], columns=["y"]
     it returns
-    proba_x_expanded = [[a, 0], [a, 0], [b, 1], [b, 1], [c, 1], [c, 1]], columns=[]
-    proba_y_expanded = [[e, 0], [f, 1], [e, 0], [f, 1], [e, 0], [f, 1]]
+    proba_x_expanded = [[a, 0], [a, 0], [b, 1], [b, 1], [c, 1], [c, 1]], columns=["x", "Index X"]
+    proba_y_expanded = [[e, 0], [f, 1], [e, 0], [f, 1], [e, 0], [f, 1]], columns=["y", "Index Y"]
     :param proba_x_: A dataframe with n rows and k columns
     :param proba_y_: A dataframe with m rows and j columns
     :return: two dataframes with n*m rows and k+1 and j+1 columns respectively. A column containing the original index
     is added
     """
-    n_x, n_y = proba_x_.shape[0], proba_y_.shape[0]
     index_x, index_y = np.array(proba_x_.index), np.array(proba_y_.index)
 
     if "Index X" in proba_x_.columns:
@@ -166,19 +157,17 @@ def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, 
     if "Index Y" in proba_y_.columns:
         raise KeyError("'Index Y' cannot be the name of a column in the probability mass samples")
 
-    proba_x_.loc[:, "Index X"] = index_x
-    proba_x_expanded = proba_x_.set_index(index_x * n_y)
-
+    proba_x_.loc[:, "Index X"] = index_x  # Adds it as a last column
     proba_y_.loc[:, "Index Y"] = index_y
-    proba_y_expanded = proba_y_.copy()
 
-    for k in range(1, n_y):
-        proba_x_expanded = pd.concat([proba_x_expanded, proba_x_.set_index(index_x*n_y + k)])
-    proba_x_expanded.sort_index(inplace=True)
+    x_array = proba_x_.to_numpy().tolist()
+    y_array = proba_y_.to_numpy().tolist()
 
-    for j in range(1, n_x):
-        proba_y_expanded = pd.concat([proba_y_expanded, proba_y_])
-    proba_y_expanded.reset_index(inplace=True, drop=True)
+    # Cartesian product of the array
+    xy_product = list(itertools.product(x_array, y_array))
+
+    proba_x_expanded = pd.DataFrame(data=[k[0] for k in xy_product], columns=proba_x_.columns)
+    proba_y_expanded = pd.DataFrame(data=[k[1] for k in xy_product], columns=proba_y_.columns)
 
     return proba_x_expanded, proba_y_expanded
 
