@@ -23,7 +23,7 @@ def generate_pi_nec_df(poss_dist: dict) -> pd.DataFrame:
         coord += [list(j) for j in itertools.combinations(poss_dist.keys(), k)]
 
     possibility = generate_pi_measure(coord, poss_dist)
-    necessity = nec_measure(coord, poss_dist)
+    necessity = generate_nec_measure(coord, poss_dist)
 
     return possibility.join(necessity)
 
