@@ -132,7 +132,12 @@ def lukaciewicz_copula(u: float, v: float) -> float:
     :return: a float between 0 and 1 corresponding to C(u,v)
     """
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        raise ValueError("u and v should be between 1 and 0. u=%s ; b=%s" % (u, v))
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
+                      "Cropping the values." % (u, v), UserWarning)
+        u = max(0., u)
+        u = min(1., u)
+        v = max(0., v)
+        v = min(1., v)
     return max(0., u + v - 1)
 
 
@@ -313,7 +318,7 @@ def create_differences_df(poss_distrib_x: dict, poss_distrib_y: dict, copula: ty
 
     df = compare_robust_to_sklar(nec_sklar, proba_join_)
 
-    return df.loc[:, df.loc["Min", :] - df.loc["Nec", :] > float(1e-5)].empty, df
+    return df.loc[:, df.loc["Min", :] > df.loc["Nec", :] + float(1e-5)].empty, df
 
 
 def sample_possibility_distribution(set_values: list, range_of_values: list) -> list:
@@ -342,36 +347,49 @@ def sample_possibility_distribution(set_values: list, range_of_values: list) -> 
     return list_of_pi_
 
 
-def sample_joint_possibilities_distributions(max_x: int, max_y: int, copula: types.FunctionType, folder: str= "", step: float=0.1) -> None:
+def sample_joint_possibilities_distributions(max_xy: int, copula: types.FunctionType, folder: str= "", step: float=0.1) -> None:
     # Creating all possibility distributions possible
     save_number = 0
     decimal_to_round = int(-np.floor(np.log10(step)))
     range_of_values = list(np.around(np.arange(0, 1, step), decimal_to_round))  # np.arange creates small errors
 
     # Changing the number of elements of X
-    for n_x in range(2, max_x + 1):
+    i = 0
+    pass_to_next_set = False
+    for n_x in range(3, max_xy + 1):
         X = ["x_%s" % i for i in range(1, n_x + 1)]
         list_of_pi_x = sample_possibility_distribution(X, range_of_values)
 
         # Doing the same for Y
-        for n_y in range(2, max_y + 1):
+        for n_y in range(n_x, max_xy + 1):
+            if n_y == 3:
+                continue
+            i += 1
+            print(i, "\n")
             Y = ["y_%s" % i for i in range(1, n_y + 1)]
             list_of_pi_y = sample_possibility_distribution(Y, range_of_values)
 
-            for p_x in list_of_pi_x:
+            for i_x, p_x in enumerate(list_of_pi_x):
                 poss_distib_x = dict(zip(X, p_x))
-                for p_y in list_of_pi_y:
+
+                for i_y, p_y in enumerate(list_of_pi_y):
+                    print("\r%s / %s" % (i_x*len(list_of_pi_y)+i_y, len(list_of_pi_y)*len(list_of_pi_x)), end="")
                     poss_distib_y = dict(zip(Y, p_y))
 
                     empty, df = create_differences_df(poss_distib_x, poss_distib_y, copula)
                     if not empty:
                         df.to_csv(op.join(folder, "df_%s.csv" % save_number))
-                        print("Saved df_%s.csv" % save_number)
+                        print("Saved df_%s.csv\n" % save_number)
                         save_number += 1
+                        pass_to_next_set = True
+                        break
+                if pass_to_next_set:
+                    pass_to_next_set = False
+                    break
 
     return
 
 
 if __name__ == '__main__':
     warnings.filterwarnings('ignore')
-    sample_joint_possibilities_distributions(5, 5, min_copula, "csv_files")
+    sample_joint_possibilities_distributions(5, min_copula, "csv_files", step=0.2)
