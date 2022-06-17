@@ -2,7 +2,8 @@ import scipy.special as sp
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import combinations
-from scipy.stats import norm, mvn
+from scipy.stats import norm, multivariate_normal
+
 plt.rcParams['text.usetex'] = True
 
 
@@ -14,10 +15,23 @@ def c_prod(l: np.array):
     return np.product(l)
 
 
-def c_gaussian(l: np.array, r=None):
+def c_gaussian(l_: np.array, r=None):
+    if 0.0 in l_:
+        return 0.0
+    if (l_ == 1.0).all():
+        return 1.0
+
+    l = l_[l_ != 1.]
+    if len(l) == 1:
+        return l[0]
     if not r:
-        r = np.eye(len(l))
-    c, i = mvn.mvnun(lower=[-100 for i in l], upper=[norm.ppf(i) for i in l], means=[0 for i in l], covar=r)
+        r = np.eye(len(l_))
+    r = r[l_ != 1.][:, l_ != 1.]
+    r[r == 0] = 0.5
+
+    dist = multivariate_normal(cov=r)
+    c = dist.cdf(np.array([norm.ppf(i) for i in l]))
+
     return c
 
 
@@ -36,8 +50,8 @@ def delta_c(l: list, d: dict, c=c_prod):
     return s
 
 
-def mass(alpha, beta, n, c=c_prod):
-    d = {"0": (1 - a) * (1 - b), "1": a + b - 2 * a * b, "2": a * b}
+def mass(alpha, beta, n, c=c_prod, round_digit=10):
+    d = {"0": round((1-alpha)*(1-beta), round_digit), "1": round(alpha+beta-2*alpha*beta, round_digit), "2": round(alpha*beta, round_digit)}
 
     k = n // 2
     r = n % 2
@@ -47,7 +61,7 @@ def mass(alpha, beta, n, c=c_prod):
         if 9-k-r-i < 0:
             continue
         # s += sp.binom(9, k-i) * sp.binom(9-(k-i), r+2*i) * (alpha*beta)**(k-i) * (alpha+beta-2*alpha*beta)**(r+2*i) * ((1-alpha)*(1-beta)) ** (9-k-r-i)
-        h_vol = delta_c((k-i)*[alpha*beta] + (r+2*i)*[alpha+beta-2*alpha*beta] + (9-k-r-i)*[(1-alpha)*(1-beta)], d, c=c)
+        h_vol = delta_c((k-i)*[round(alpha*beta, round_digit)] + (r+2*i)*[round(alpha+beta-2*alpha*beta, round_digit)] + (9-k-r-i)*[round((1-alpha)*(1-beta), round_digit)], d, c=c)
         s += sp.binom(9, k - i) * sp.binom(9 - (k - i), r + 2 * i) * h_vol
     return s
 
