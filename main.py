@@ -141,6 +141,48 @@ def lukaciewicz_copula(u: float, v: float) -> float:
     return max(0., u + v - 1)
 
 
+def ali_mikhail_haq_copula(u, v, theta):
+    if 0. > u or 1. < u or 0 > v or 1 < v:
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
+                      "Cropping the values." % (u, v), UserWarning)
+        u = max(0., u)
+        u = min(1., u)
+        v = max(0., v)
+        v = min(1., v)
+    if theta < -1 or theta >= 1:
+        err = "Theta should be in [-1, 1[: theta=%s" % theta
+        raise ValueError(err)
+    return u * v / (1 - theta * (1 - u) * (1 - v))
+
+
+def clayton_copula(u, v, theta):
+    if 0. > u or 1. < u or 0 > v or 1 < v:
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
+                      "Cropping the values." % (u, v), UserWarning)
+        u = max(0., u)
+        u = min(1., u)
+        v = max(0., v)
+        v = min(1., v)
+    if theta < -1 or theta == 0:
+        err = "Theta should be in [-1, infty[ / {0}: theta=%s" % theta
+        raise ValueError(err)
+    return max(u**(-theta) + v**(-theta) - 1, 0)**(-1/theta)
+
+
+def gumbel_copula(u, v, theta):
+    if 0. > u or 1. < u or 0 > v or 1 < v:
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
+                      "Cropping the values." % (u, v), UserWarning)
+        u = max(0., u)
+        u = min(1., u)
+        v = max(0., v)
+        v = min(1., v)
+    if theta <= 0 or theta > 1:
+        err = "Theta should be in ]0, 1]: theta=%s" % theta
+        raise ValueError(err)
+    return u*v*np.exp(-theta*np.log(u)*np.log(v))
+
+
 def expand_df(proba_x_: pd.DataFrame, proba_y_: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     """
     In order to have every combination possible for rows of proba_x_ and proba_y_, it is necessary to duplicate each
