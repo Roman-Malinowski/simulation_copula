@@ -2,50 +2,50 @@ import scipy.special as sp
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import combinations
-from scipy.stats import norm, multivariate_normal
+from scipy.stats import norm, multivariate_normal, random_correlation
 
 plt.rcParams['text.usetex'] = True
 
 
-def c_min(l: np.array):
-    return min(l)
+def c_min(u: np.array):
+    return min(u)
 
 
-def c_prod(l: np.array):
-    return np.product(l)
+def c_prod(u: np.array):
+    return np.product(u)
 
 
-def c_gaussian(l_: np.array, r=None):
-    if 0.0 in l_:
-        return 0.0
-    if (l_ == 1.0).all():
-        return 1.0
-
-    l = l_[l_ != 1.]
-    if len(l) == 1:
-        return l[0]
-    if not r:
-        r = np.eye(len(l_))
-    r = r[l_ != 1.][:, l_ != 1.]
-    r[r == 0] = 0.5
-
+def c_gaussian(u: np.array, r=None):
+    if r is None:
+        r = np.eye(len(u))
+    if 0.0 in u:
+        # Sometimes having a 0 in l gives nan instead of 0...
+        return 0
     dist = multivariate_normal(cov=r)
-    c = dist.cdf(np.array([norm.ppf(i) for i in l]))
-
+    c = dist.cdf(np.array([norm.ppf(i) for i in u]))
     return c
 
 
-def delta_c(l: list, d: dict, c=c_prod):
+def random_correlation_matrix(size=9):
+    # Create a random correlation matrix
+    rng = np.random.default_rng(10)
+    eigen_val = np.random.rand(size)
+    eigen_val = eigen_val * size / sum(eigen_val)
+    r = random_correlation.rvs(eigen_val)
+    return r
+
+
+def delta_c(l_mass: list, d: dict, c=c_prod):
     s = 0
     d_cumul = {i: np.sum([d[str(k)] for k in range(int(i)+1)]) for i in d.keys()}
-    l_key = [[k for k in d.keys() if d[k] == i][0] for i in l]
+    l_key = [[k for k in d.keys() if d[k] == i][0] for i in l_mass]
 
     for i in range(10):
         sub_volumes = [np.array(k) for k in combinations(range(9), i)]
         for x in sub_volumes:
             sub = np.array([d_cumul[k] for k in l_key])
             if len(x) > 0:
-                sub[x] = sub[x] - np.array(l)[x]
+                sub[x] = sub[x] - np.array(l_mass)[x]
             s += (-1)**i*c(sub)
     return s
 
@@ -60,7 +60,7 @@ def mass(alpha, beta, n, c=c_prod, round_digit=10):
     for i in range(k+1):
         if 9-k-r-i < 0:
             continue
-        # s += sp.binom(9, k-i) * sp.binom(9-(k-i), r+2*i) * (alpha*beta)**(k-i) * (alpha+beta-2*alpha*beta)**(r+2*i) * ((1-alpha)*(1-beta)) ** (9-k-r-i)
+
         h_vol = delta_c((k-i)*[round(alpha*beta, round_digit)] + (r+2*i)*[round(alpha+beta-2*alpha*beta, round_digit)] + (9-k-r-i)*[round((1-alpha)*(1-beta), round_digit)], d, c=c)
         s += sp.binom(9, k - i) * sp.binom(9 - (k - i), r + 2 * i) * h_vol
     return s
@@ -76,22 +76,25 @@ if __name__ == "__main__":
     pi = np.hstack([cs, np.flip(cs[:-1])])
     plt.plot(range(459 - 18, 459 + 19), pi, 'b+')
 
-    m_m = [mass(a, b, -n, c=c_min) for n in range(-18, 1)]
+    """m_m = [mass(a, b, -n, c=c_min) for n in range(-18, 1)]
     cs_m = np.cumsum(m_m)
     pi_m = np.hstack([cs_m, np.flip(cs_m[:-1])])
-    plt.plot(range(459 - 18, 459 + 19), pi_m, 'r+')
+    plt.plot(range(459 - 18, 459 + 19), pi_m, 'r+')"""
 
-    m_g = [mass(a, b, -n, c=c_gaussian) for n in range(-18, 1)]
+    r = random_correlation_matrix()
+
+    m_g = [mass(a, b, -n, c=lambda u: c_gaussian(u, r)) for n in range(-18, 1)]
     cs_g = np.cumsum(m_g)
+    cs_g /= cs_g[-1]
     pi_g = np.hstack([cs_g, np.flip(cs_g[:-1])])
-    plt.plot(range(459 - 18, 459 + 19), pi_g, 'g+')
+    plt.plot(range(459 - 18, 459 + 19), pi_g, 'gx')
     print(m_g)
     print(pi_g)
 
-    plt.title("$\pi$")
+    plt.title(r"$\pi$")
     plt.xlim(459-19, 459+19)
     plt.ylim(-0.01, 1.01)
-    plt.legend(['$\Pi$', '$\min$'])
+    plt.legend([r'$\Pi$', r'$Gaussian$'])
     plt.xticks([459+5*i for i in range(-3, 4)], ["$"+str(459+5*i)+"$" for i in range(-3, 4)])
 
     plt.show()
