@@ -28,10 +28,10 @@ def c_gaussian(u: np.array, r=None):
 
 def random_correlation_matrix(size=9):
     # Create a random correlation matrix
-    rng = np.random.default_rng(10)
-    eigen_val = np.random.rand(size)
+    rng = np.random.default_rng(42)
+    eigen_val = rng.random(size)
     eigen_val = eigen_val * size / sum(eigen_val)
-    r = random_correlation.rvs(eigen_val)
+    r = random_correlation.rvs(eigen_val, random_state=rng)
     return r
 
 
