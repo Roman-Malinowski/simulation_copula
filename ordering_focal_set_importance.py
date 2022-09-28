@@ -1,9 +1,10 @@
-import types
+import typing
 import numpy as np
 import itertools
 
 import pandas as pd
-from Copulas import *
+from Copulas import min_copula, lukaciewicz_copula, product_copula, gumbel_copula,\
+    ali_mikhail_haq_copula, clayton_copula
 
 
 def check_possibility_distribution(poss: dict) -> None:
@@ -46,7 +47,7 @@ def mass_from_possibility(poss: dict) -> dict:
 
 
 def joint_mass(mass_x: pd.DataFrame, mass_y: pd.DataFrame, order_x: pd.DataFrame, order_y: pd.DataFrame,
-               copula: types.FunctionType) -> pd.DataFrame:
+               copula: typing.Callable[[float, float], float]) -> pd.DataFrame:
     """
     Compute the joint mass from two marginal masses, with a specified order and a specified copula
     mass_x, mass_y: pd.Dataframe with columns 'Focal sets' and 'mass'.
@@ -117,21 +118,14 @@ def generator_probability(poss: dict, epsilon: float = 1e-6, num=11) -> pd.DataF
                 continue
 
             for focal_set in mass["Focal sets"]:
-                inclusion = [k in focal_set for k in mass["Focal sets"]]
-                nec = mass[inclusion]["mass"].sum()
-
-                intersection = [len(set(focal_set.split(",")) & set(k.split(","))) > 0 for k in mass["Focal sets"]]
-                pl = mass[intersection]["mass"].sum()
-
-                # TODO: I believe only comparing to the necessity is enough
-                if (pl + epsilon < p.loc[focal_set.split(","), "P"].sum()) | (
-                        p.loc[focal_set.split(","), "P"].sum() < nec - epsilon):
+                # Because it is from a Necessity function, checking on focal sets is enough
+                if p.loc[focal_set.split(","), "P"].sum() < prob_range.loc[focal_set, "Nec"] - epsilon:
                     continue
             yield p
 
 
 def joint_proba_on_atoms(p_x: pd.DataFrame, p_y: pd.DataFrame, order_x: pd.DataFrame, order_y: pd.DataFrame,
-                         copula: types.FunctionType) -> pd.DataFrame:
+                         copula: typing.Callable[[float, float], float]) -> pd.DataFrame:
     """
         Compute the joint probability on atoms from two marginal probabilities,
         with a specified order and a specified copula
@@ -170,7 +164,7 @@ def joint_proba_on_atoms(p_x: pd.DataFrame, p_y: pd.DataFrame, order_x: pd.DataF
 
 
 def approximate_robust_credal_set(poss_x: dict, poss_y: dict, order_x_p: pd.DataFrame, order_y_p: pd.DataFrame,
-                                  copula: types.FunctionType) -> pd.DataFrame:
+                                  copula: typing.Callable[[float, float], float]) -> pd.DataFrame:
     """
     Approximate the robust credal set from marginal credal sets
     poss_x, poss_y: dict. Contains the possibility distribution
@@ -227,7 +221,6 @@ if __name__ == "__main__":
     order_y_precise = pd.DataFrame(columns=["order"], index=pd.Index(["y1", "y2", "y3"]))
     order_y_precise["order"] = [1, 2, 3]
 
-    p_rob = approximate_robust_credal_set(poss_x, poss_y, order_x_precise, order_y_precise, min_copula)
-    print(p_rob)
-    p_rob.to_csv("robust_set.csv")
+    #p_rob = approximate_robust_credal_set(poss_x, poss_y, order_x_precise, order_y_precise, min_copula)
+    p_rob = pd.read_csv("robust_set.csv", index_col=[0,1])
     # print(joint_mass(mass_from_possibility(poss_x), mass_from_possibility(poss_y), order_x, order_y, min_copula))
