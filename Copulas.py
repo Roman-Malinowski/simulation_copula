@@ -4,7 +4,7 @@ import numpy as np
 
 def min_copula(u: float, v: float) -> float:
     """
-    The minimun copula
+    The minimum copula
     :param u: a float between 0 and 1
     :param v: a float between 0 and 1
     :return: a float between 0 and 1 corresponding to C(u,v)
@@ -36,7 +36,7 @@ def lukaciewicz_copula(u: float, v: float) -> float:
     return max(0., u + v - 1)
 
 
-def ali_mikhail_haq_copula(u, v, theta):
+def ali_mikhail_haq_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
         warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
                       "Cropping the values." % (u, v), UserWarning)
@@ -50,7 +50,7 @@ def ali_mikhail_haq_copula(u, v, theta):
     return u * v / (1 - theta * (1 - u) * (1 - v))
 
 
-def clayton_copula(u, v, theta):
+def clayton_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
         warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
                       "Cropping the values." % (u, v), UserWarning)
@@ -64,7 +64,7 @@ def clayton_copula(u, v, theta):
     return max(u**(-theta) + v**(-theta) - 1, 0)**(-1/theta)
 
 
-def gumbel_copula(u, v, theta):
+def gumbel_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
         warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
                       "Cropping the values." % (u, v), UserWarning)
@@ -78,7 +78,7 @@ def gumbel_copula(u, v, theta):
     return u*v*np.exp(-theta*np.log(u)*np.log(v))
 
 
-def product_copula(u, v, theta):
+def product_copula(u: float, v: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
         warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
                       "Cropping the values." % (u, v), UserWarning)
