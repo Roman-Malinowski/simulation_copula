@@ -57,9 +57,11 @@ class NecessityUnivariate:
 
     def check_order(self) -> None:
         if self.order_focal_sets is not None:
-            assert self.mass.index.equals(self.order_focal_sets.index), \
+            assert self.mass.index.sort_values().equals(self.order_focal_sets.index.sort_values()), \
                 "order_focal_sets.index does not match the one of mass.index." \
-                "I am not that smart, please use %s instead of %s" % (self.mass.index, self.order_focal_sets.index)
+                "I am not that smart, please use %s instead of %s"\
+                % (self.mass.index.sort_values(), self.order_focal_sets.index.sort_values())
+
             assert "order" in self.order_focal_sets.columns, "order_focal_sets should have a column named 'order': %s" \
                                                              % self.order_focal_sets.columns
 
@@ -76,10 +78,10 @@ class NecessityBivariate:
             assert nec.order_focal_sets is not None, "No specified order on focal sets given: %s" % nec.mass
 
         self.multi_index = pd.MultiIndex.from_product([self.nec_x.mass.index, self.nec_y.mass.index], names=("X", "Y"))
-        self.mass_joint = pd.DataFrame(columns=["mass"], index=self.multi_index)
-        self.joint_mass()
+        self.mass = pd.DataFrame(columns=["mass"], index=self.multi_index)
+        self.join_mass()
 
-    def joint_mass(self) -> None:
+    def join_mass(self) -> None:
         """
         Compute the joint mass from two marginal masses, with a specified order and a specified copula
         mass_x, mass_y: pd.DataFrame with column 'mass'.
@@ -113,6 +115,6 @@ class NecessityBivariate:
             sum_y_inf = self.nec_y.mass[self.nec_y.mass.index.isin(index_focal.values)]["mass"].sum(axis=0)
             sum_y_sup = sum_y_inf + self.nec_y.mass.loc[a_y, "mass"]
 
-            self.mass_joint.loc[(a_x, a_y), "mass"] = \
+            self.mass.loc[(a_x, a_y), "mass"] = \
                 self.copula(sum_x_sup, sum_y_sup) - self.copula(sum_x_sup, sum_y_inf) - \
                 self.copula(sum_x_inf, sum_y_sup) + self.copula(sum_x_inf, sum_y_inf)

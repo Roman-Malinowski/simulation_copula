@@ -72,7 +72,9 @@ class RobustCredalSetBivariate:
                                  index=pd.MultiIndex.from_product([self.rob_x.nec.atoms, self.rob_y.nec.atoms],
                                                                   names=["X", "Y"]))
 
-    def joint_proba_on_atoms(self, p_x: pd.DataFrame, p_y: pd.DataFrame) -> None:
+        self.approximation = None
+
+    def join_proba_on_atoms(self, p_x: pd.DataFrame, p_y: pd.DataFrame) -> None:
         """
         Compute the joint probability on atoms from two marginal probabilities,
         with a specified order and a specified copula
@@ -104,7 +106,7 @@ class RobustCredalSetBivariate:
             self.p_xy.loc[(a_x, a_y), "P"] = self.copula(sum_x_sup, sum_y_sup) - self.copula(sum_x_sup, sum_y_inf) - \
                                              self.copula(sum_x_inf, sum_y_sup) + self.copula(sum_x_inf, sum_y_inf)
 
-    def approximate_robust_credal_set(self, poss_x: dict, poss_y: dict) -> pd.DataFrame:
+    def approximate_robust_credal_set(self) -> None:
         """
         Approximate the robust credal set from marginal credal sets
         Output robust_df: A DataFrame with multi index and a single column "P_inf" containing the approximation of the lower
@@ -115,27 +117,28 @@ class RobustCredalSetBivariate:
         """
 
         full_events_x = []
-        for k in range(1, len(poss_x.keys()) + 1):
-            full_events_x += [",".join(list(j)) for j in itertools.combinations(poss_x.keys(), k)]
+        # self.order_x_p.keys() is basically ["x1", "x2", "x3"] (=X). full_events_x is thus the power set of X
+        for k in range(1, len(self.order_x_p.keys()) + 1):
+            full_events_x += [",".join(list(j)) for j in itertools.combinations(self.order_x_p.keys(), k)]
 
         full_events_y = []
-        for k in range(1, len(poss_y.keys()) + 1):
-            full_events_y += [",".join(list(j)) for j in itertools.combinations(poss_y.keys(), k)]
+        # self.order_y_p.keys() is basically ["y1", "y2", "y3"] (=Y). full_events_y is thus the power set of Y
+        for k in range(1, len(self.order_y_p.keys()) + 1):
+            full_events_y += [",".join(list(j)) for j in itertools.combinations(self.order_x_p.keys(), k)]
 
         multi = pd.MultiIndex.from_product([full_events_x, full_events_y], names=["X", "Y"])
-        robust_df = pd.DataFrame(columns=["P_inf", "P"], index=multi)
-        robust_df["P_inf"] = 1
+        self.approximation = pd.DataFrame(columns=["P_inf", "P"], index=multi)
+        self.approximation["P_inf"] = 1
 
         generator_x = self.rob_x.generator_credal_set()
         generator_y = self.rob_y.generator_credal_set()
 
         for p_x in generator_x:
             for p_y in generator_y:
-                self.joint_proba_on_atoms(p_x, p_y)
-                for x, y in robust_df.index:
+                self.join_proba_on_atoms(p_x, p_y)
+                for x, y in self.approximation.index:
                     x_i, y_i = x.split(","), y.split(",")
                     atoms = list(itertools.product(*[x_i, y_i]))
-                    if robust_df.loc[(x, y), "P_inf"] > self.p_xy.loc[atoms, "P"].sum():
-                        robust_df.loc[(x, y), "P_inf"] = np.round(self.p_xy.loc[atoms, "P"].sum(), 6)
-                        robust_df.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(list(p_y["P"].round(6)))
-        return robust_df
+                    if self.approximation.loc[(x, y), "P_inf"] > self.p_xy.loc[atoms, "P"].sum():
+                        self.approximation.loc[(x, y), "P_inf"] = np.round(self.p_xy.loc[atoms, "P"].sum(), 6)
+                        self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(list(p_y["P"].round(6)))
