@@ -39,23 +39,27 @@ class RobustCredalSetUnivariate:
         # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
         list_of_ranges = [np.linspace(self.prob_range.loc[p.index[k], "Nec"], self.prob_range.loc[p.index[k], "Pl"],
                                       num=self.samples_per_interval) for k in range(len(self.nec.atoms) - 1)]
-
         k_index = IndexGenerator([len(k) for k in list_of_ranges])
-
         for _ in range(np.product(k_index.max_range)):
             x = []
-            for k in range(len(list_of_ranges) - 1):
+            for k in range(len(list_of_ranges)):
                 x += [list_of_ranges[k][k_index.index[k]]]
             x += [1 - sum(x)]
             p.loc[:, "P"] = x
             k_index.next()
 
+            continue_flag = False
             if np.any(p["P"] < 0):
-                continue
+                continue_flag = True 
+                
             for focal_set in self.nec.mass.index:
                 # Because it is from a Necessity function, checking on focal sets is enough
                 if p.loc[focal_set.split(","), "P"].sum() < self.prob_range.loc[focal_set, "Nec"] - self.epsilon:
-                    continue
+                    continue_flag = True 
+            if continue_flag:
+                print("NO", p)
+                continue
+            print("YES", p)
             yield p
 
 
@@ -79,7 +83,6 @@ class IndexGenerator:
 
 
 class RobustCredalSetBivariate:
-
     def __init__(self, rob_x: RobustCredalSetUnivariate, rob_y: RobustCredalSetUnivariate, order_x_p: pd.DataFrame,
                  order_y_p: pd.DataFrame, copula: typing.Callable[[float, float], float]) -> None:
         """
@@ -142,14 +145,14 @@ class RobustCredalSetBivariate:
         """
 
         full_events_x = []
-        # self.order_x_p.keys() is basically ["x1", "x2", "x3"] (=X). full_events_x is thus the power set of X
-        for k in range(1, len(self.order_x_p.keys()) + 1):
-            full_events_x += [",".join(list(j)) for j in itertools.combinations(self.order_x_p.keys(), k)]
+        # self.order_x_p.index is basically ["x1", "x2", "x3"] (=X). full_events_x is thus the power set of X
+        for k in range(1, len(self.order_x_p.index) + 1):
+            full_events_x += [",".join(list(j)) for j in itertools.combinations(self.order_x_p.index, k)]
 
         full_events_y = []
-        # self.order_y_p.keys() is basically ["y1", "y2", "y3"] (=Y). full_events_y is thus the power set of Y
-        for k in range(1, len(self.order_y_p.keys()) + 1):
-            full_events_y += [",".join(list(j)) for j in itertools.combinations(self.order_x_p.keys(), k)]
+        # self.order_y_p.index is basically ["y1", "y2", "y3"] (=Y). full_events_y is thus the power set of Y
+        for k in range(1, len(self.order_y_p.index) + 1):
+            full_events_y += [",".join(list(j)) for j in itertools.combinations(self.order_y_p.index, k)]
 
         multi = pd.MultiIndex.from_product([full_events_x, full_events_y], names=["X", "Y"])
         self.approximation = pd.DataFrame(columns=["P_inf", "P"], index=multi)
