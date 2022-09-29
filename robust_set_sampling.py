@@ -34,23 +34,48 @@ class RobustCredalSetUnivariate:
         """
         Generator function for probabilities. Yields a sampled probability respecting the probability ranges on atoms
         """
-
-        # TODO How to do the same with any number of atoms?
         p = pd.DataFrame(columns=["P"], index=pd.Index(self.nec.atoms), dtype=float)
-        for x1 in np.linspace(self.prob_range.loc[p.index[0], "Nec"], self.prob_range.loc[p.index[0], "Pl"],
-                              num=self.samples_per_interval):
-            for x2 in np.linspace(self.prob_range.loc[p.index[1], "Nec"], self.prob_range.loc[p.index[1], "Pl"],
-                                  num=self.samples_per_interval):
-                p.loc[p.index[0:3], "P"] = [x1, x2, 1 - x1 - x2]
 
-                if np.any(p["P"] < 0):
+        # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
+        list_of_ranges = [np.linspace(self.prob_range.loc[p.index[k], "Nec"], self.prob_range.loc[p.index[k], "Pl"],
+                                      num=self.samples_per_interval) for k in range(len(self.nec.atoms) - 1)]
+
+        k_index = IndexGenerator([len(k) for k in list_of_ranges])
+
+        for _ in range(np.product(k_index.max_range)):
+            x = []
+            for k in range(len(list_of_ranges) - 1):
+                x += [list_of_ranges[k][k_index.index[k]]]
+            x += [1 - sum(x)]
+            p.loc[:, "P"] = x
+            k_index.next()
+
+            if np.any(p["P"] < 0):
+                continue
+            for focal_set in self.nec.mass.index:
+                # Because it is from a Necessity function, checking on focal sets is enough
+                if p.loc[focal_set.split(","), "P"].sum() < self.prob_range.loc[focal_set, "Nec"] - self.epsilon:
                     continue
+            yield p
 
-                for focal_set in self.nec.mass.index:
-                    # Because it is from a Necessity function, checking on focal sets is enough
-                    if p.loc[focal_set.split(","), "P"].sum() < self.prob_range.loc[focal_set, "Nec"] - self.epsilon:
-                        continue
-                yield p
+
+class IndexGenerator:
+
+    def __init__(self, dim_sizes: list):
+        self.index = np.zeros(len(dim_sizes), dtype=int)
+        self.max_range = np.array(dim_sizes, dtype=int)
+
+    def increment_bit(self, i: int) -> None:
+        if i == -1:
+            self.index[:] = 0
+        else:
+            self.index[i] += 1
+            if self.index[i] == self.max_range[i]:
+                self.index[i:] = 0
+                self.increment_bit(i - 1)
+
+    def next(self):
+        self.increment_bit(len(self.index) - 1)
 
 
 class RobustCredalSetBivariate:
@@ -141,4 +166,5 @@ class RobustCredalSetBivariate:
                     atoms = list(itertools.product(*[x_i, y_i]))
                     if self.approximation.loc[(x, y), "P_inf"] > self.p_xy.loc[atoms, "P"].sum():
                         self.approximation.loc[(x, y), "P_inf"] = np.round(self.p_xy.loc[atoms, "P"].sum(), 6)
-                        self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(list(p_y["P"].round(6)))
+                        self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(
+                            list(p_y["P"].round(6)))
