@@ -4,7 +4,7 @@ import itertools
 import numpy as np
 import os.path as op
 import warnings
-from Copulas import *
+from copulas import *
 
 def generate_pi_nec_df(poss_dist: dict) -> pd.DataFrame:
     """

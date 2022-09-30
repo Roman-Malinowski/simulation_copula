@@ -39,7 +39,7 @@ class RobustCredalSetUnivariate:
         # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
         list_of_ranges = [np.linspace(self.prob_range.loc[p.index[k], "Nec"], self.prob_range.loc[p.index[k], "Pl"],
                                       num=self.samples_per_interval) for k in range(len(self.nec.atoms) - 1)]
-        k_index = IndexGenerator([len(k) for k in list_of_ranges])
+        k_index = IndexSampling([len(k) for k in list_of_ranges])
         for _ in range(np.product(k_index.max_range)):
             x = []
             for k in range(len(list_of_ranges)):
@@ -57,13 +57,11 @@ class RobustCredalSetUnivariate:
                 if p.loc[focal_set.split(","), "P"].sum() < self.prob_range.loc[focal_set, "Nec"] - self.epsilon:
                     continue_flag = True 
             if continue_flag:
-                print("NO", p)
                 continue
-            print("YES", p)
             yield p
 
 
-class IndexGenerator:
+class IndexSampling:
 
     def __init__(self, dim_sizes: list):
         self.index = np.zeros(len(dim_sizes), dtype=int)
