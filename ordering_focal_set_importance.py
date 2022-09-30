@@ -19,7 +19,7 @@ if __name__ == "__main__":
     nec_y_vanilla = NecessityUnivariate(poss_y)
 
     n_order = 1
-
+    flag_break = False
     # Orderings
     for perm_x in itertools.permutations(range(1, len(nec_x_vanilla.mass.index) + 1)):
         order_x = pd.DataFrame(columns=["order"], index=nec_x_vanilla.mass.index, data=perm_x)
@@ -36,7 +36,17 @@ if __name__ == "__main__":
 
             nec_xy = NecessityBivariate(nec_x, nec_y, min_copula)
 
+            if ((rob_xy.approximation["P_inf"] - nec_xy.necessity["Nec"]) < - rob_xy.rob_x.epsilon).any():
+                nec_xy.necessity.to_csv("%s_Nec_xy.csv" % n_order)
 
-    # p_rob = approximate_robust_credal_set(poss_x, poss_y, order_x_precise, order_y_precise, min_copula)
-    # p_rob = pd.read_csv("robust_set.csv", index_col=[0,1])
-    # print(joint_mass(mass_from_possibility(poss_x), mass_from_possibility(poss_y), order_x, order_y, min_copula))
+                order_x.append(order_y).to_csv("%s_orders.csv" % n_order)
+
+                rob_xy.approximation.to_csv("%s_P_inf.csv" % n_order)
+
+                n_order += 1
+                flag_break = True
+
+            if flag_break:
+                break
+        if flag_break:
+            break
