@@ -1,52 +1,67 @@
 import itertools
 import pandas as pd
+import os.path
+import numpy as np
 
 from copulas import min_copula
 from necessity_functions import NecessityUnivariate, NecessityBivariate
 from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate
 
 
+def generator_poss(keys: list) -> dict:
+    for k in range(len(keys)):
+        for i in np.linspace(0, 1, 11):
+            for j in np.linspace(0, 1, 11):
+                a = np.insert(np.array([i, j]), k, 1)
+                yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
+
+
 if __name__ == "__main__":
+    output_dir = "/work/scratch/malinoro/simulation_copula/out"
     # Possibility distributions
-    poss_x = {"x1": 0.2, "x2": 1, "x3": 0.2}
-    poss_y = {"y1": 0.7, "y2": 1}
-    
+    possibilities_x = generator_poss(["x1", "x2", "x3"])
+    possibilities_y = generator_poss(["y1", "y2", "y3"])
+
     order_x_precise = pd.DataFrame(columns=["order"], index=["x1", "x2", "x3"], data=[1, 2, 3])
-    order_y_precise = pd.DataFrame(columns=["order"], index=["y1", "y2"], data=[1, 2])
-    
-    # Finding focal sets
-    nec_x_vanilla = NecessityUnivariate(poss_x)
-    nec_y_vanilla = NecessityUnivariate(poss_y)
+    order_y_precise = pd.DataFrame(columns=["order"], index=["y1", "y2", "y3"], data=[1, 2, 3])
 
-    n_order = 1
-    flag_break = False
-    # Orderings
-    for perm_x in itertools.permutations(range(1, len(nec_x_vanilla.mass.index) + 1)):
-        order_x = pd.DataFrame(columns=["order"], index=nec_x_vanilla.mass.index, data=perm_x)
-        nec_x = NecessityUnivariate(poss_x, order_x)
-        rob_x = RobustCredalSetUnivariate(nec_x)
+    for poss_x in possibilities_x:
+        for poss_y in possibilities_y:
+            # Finding focal sets
+            nec_x_vanilla = NecessityUnivariate(poss_x)
+            nec_y_vanilla = NecessityUnivariate(poss_y)
 
-        for perm_y in itertools.permutations(range(1, len(nec_y_vanilla.mass.index) + 1)):
-            order_y = pd.DataFrame(columns=["order"], index=nec_y_vanilla.mass.index, data=perm_y)
-            nec_y = NecessityUnivariate(poss_y, order_y)
-            rob_y = RobustCredalSetUnivariate(nec_y)
+            n_order = 1
+            # Orderings
+            flag_order_work = False
 
-            rob_xy = RobustCredalSetBivariate(rob_x, rob_y, order_x_precise, order_y_precise, min_copula)
-            rob_xy.approximate_robust_credal_set()
+            for perm_x in itertools.permutations(range(1, len(nec_x_vanilla.mass.index) + 1)):
+                order_x = pd.DataFrame(columns=["order"], index=nec_x_vanilla.mass.index, data=perm_x)
+                nec_x = NecessityUnivariate(poss_x, order_x)
+                rob_x = RobustCredalSetUnivariate(nec_x)
 
-            nec_xy = NecessityBivariate(nec_x, nec_y, min_copula)
+                for perm_y in itertools.permutations(range(1, len(nec_y_vanilla.mass.index) + 1)):
+                    order_y = pd.DataFrame(columns=["order"], index=nec_y_vanilla.mass.index, data=perm_y)
+                    nec_y = NecessityUnivariate(poss_y, order_y)
+                    rob_y = RobustCredalSetUnivariate(nec_y)
 
-            if ((rob_xy.approximation["P_inf"] - nec_xy.necessity["Nec"]) < - rob_xy.rob_x.epsilon).any():
-                nec_xy.necessity.to_csv("%s_Nec_xy.csv" % n_order)
+                    rob_xy = RobustCredalSetBivariate(rob_x, rob_y, order_x_precise, order_y_precise, min_copula)
+                    rob_xy.approximate_robust_credal_set()
 
-                order_x.append(order_y).to_csv("%s_orders.csv" % n_order)
+                    nec_xy = NecessityBivariate(nec_x, nec_y, min_copula)
 
-                rob_xy.approximation.to_csv("%s_P_inf.csv" % n_order)
+                    if ((rob_xy.approximation["P_inf"] - nec_xy.necessity["Nec"]) > - rob_xy.rob_x.epsilon).all():
+                        flag_order_work = True
+                        continue
+                if flag_order_work:
+                    continue
+
+            if not flag_order_work:
+                nec_xy.nec_x.mass.to_csv(os.path.join(output_dir, "%s_Nec_x.csv" % n_order))
+                nec_xy.nec_y.mass.to_csv(os.path.join(output_dir, "%s_Nec_y.csv" % n_order))
+
+                rob_xy.approximation.to_csv(os.path.join(output_dir, "%s_P_inf.csv" % n_order))
 
                 n_order += 1
-                flag_break = True
 
-            if flag_break:
-                break
-        if flag_break:
-            break
+        possibilities_y = generator_poss(["y1", "y2", "y3"])
