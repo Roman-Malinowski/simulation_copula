@@ -1,5 +1,5 @@
 import typing
-
+import itertools
 import pandas as pd
 
 
@@ -11,8 +11,11 @@ class NecessityUnivariate:
         self.atoms = None
         self.initiate_atoms()
 
-        self.mass = pd.DataFrame(columns=["mass"])
-        self.mass_from_possibility()
+        self.mass = None
+        self.compute_mass()
+
+        self.necessity = None
+        self.compute_necessity()
 
         self.order_focal_sets = order_focal_sets
         self.check_order()
@@ -30,7 +33,7 @@ class NecessityUnivariate:
                                            % (k, self.poss[k])
         self.atoms = self.poss.keys()
 
-    def mass_from_possibility(self) -> None:
+    def compute_mass(self) -> None:
         """Find the focal sets and compute their mass from a possibility distribution.
         Return a DataFrame with column 'mass'
         Example:
@@ -39,7 +42,7 @@ class NecessityUnivariate:
         x1,x3       0.3
         x1          0.5
         """
-
+        self.mass = pd.DataFrame(columns=["mass"])
         # Create a row for the empty set with null mass for later difference
         self.mass.loc["empty", "mass"] = 0
 
@@ -54,6 +57,20 @@ class NecessityUnivariate:
         self.mass["mass"] = self.mass["mass"].diff()
 
         self.mass.drop(index="empty", inplace=True)
+
+    def compute_necessity(self) -> None:
+        full_events = []
+        # self.atoms is basically ["x1", "x2", "x3"] (=X). full_events is thus the power set of X
+        for k in range(1, len(self.atoms) + 1):
+            full_events += [",".join(list(j)) for j in itertools.combinations(self.atoms, k)]
+
+        self.necessity = pd.DataFrame(columns=['Nec'], index=full_events)
+
+        for x in full_events:
+            x_i = x.split(",")
+            inclusion = [k for k in self.mass.index if set(k.split(",")).issubset(set(x_i))]
+
+            self.necessity.loc[x, "Nec"] = self.mass.loc[inclusion, "mass"].sum()
 
     def check_order(self) -> None:
         if self.order_focal_sets is not None:
@@ -79,9 +96,12 @@ class NecessityBivariate:
 
         self.multi_index = pd.MultiIndex.from_product([self.nec_x.mass.index, self.nec_y.mass.index], names=("X", "Y"))
         self.mass = pd.DataFrame(columns=["mass"], index=self.multi_index)
-        self.join_mass()
+        self.compute_mass()
 
-    def join_mass(self) -> None:
+        self.necessity = None
+        self.compute_necessity()
+
+    def compute_mass(self) -> None:
         """
         Compute the joint mass from two marginal masses, with a specified order and a specified copula
         mass_x, mass_y: pd.DataFrame with column 'mass'.
@@ -118,3 +138,25 @@ class NecessityBivariate:
             self.mass.loc[(a_x, a_y), "mass"] = \
                 self.copula(sum_x_sup, sum_y_sup) - self.copula(sum_x_sup, sum_y_inf) - \
                 self.copula(sum_x_inf, sum_y_sup) + self.copula(sum_x_inf, sum_y_inf)
+
+    def compute_necessity(self) -> None:
+        full_events_x = []
+        # self.nec_x.atoms is basically ["x1", "x2", "x3"] (=X). full_events_x is thus the power set of X
+        for k in range(1, len(self.nec_x.atoms) + 1):
+            full_events_x += [",".join(list(j)) for j in itertools.combinations(self.nec_x.atoms, k)]
+
+        full_events_y = []
+        # self.nec_y.atoms is basically ["y1", "y2", "y3"] (=Y). full_events_y is thus the power set of Y
+        for k in range(1, len(self.nec_y.atoms) + 1):
+            full_events_y += [",".join(list(j)) for j in itertools.combinations(self.nec_y.atoms, k)]
+
+        multi = pd.MultiIndex.from_product([full_events_x, full_events_y], names=["X", "Y"])
+        self.necessity = pd.DataFrame(index=multi, columns=["Nec"])
+
+        for x, y in multi:
+            x_i, y_i = x.split(","), y.split(",")
+            inclusion_x = [k for k in self.nec_x.mass.index if set(k.split(",")).issubset(set(x_i))]
+            inclusion_y = [k for k in self.nec_y.mass.index if set(k.split(",")).issubset(set(y_i))]
+
+            sub_multi = pd.MultiIndex.from_product([inclusion_x, inclusion_y])
+            self.necessity.loc[(x, y), "Nec"] = self.mass.loc[sub_multi, "mass"].sum()

@@ -24,8 +24,7 @@ class RobustCredalSetUnivariate:
 
     def compute_prob_range(self) -> None:
         for event in self.prob_range.index:
-            inclusion = [k in event for k in self.nec.mass.index]
-            self.prob_range.loc[event, "Nec"] = self.nec.mass.loc[inclusion, "mass"].sum()
+            self.prob_range.loc[event, "Nec"] = self.nec.necessity.loc[event, "Nec"]
 
             intersection = [len(set(event.split(",")) & set(k.split(","))) > 0 for k in self.nec.mass.index]
             self.prob_range.loc[event, "Pl"] = self.nec.mass[intersection]["mass"].sum()
@@ -169,3 +168,5 @@ class RobustCredalSetBivariate:
                         self.approximation.loc[(x, y), "P_inf"] = np.round(self.p_xy.loc[atoms, "P"].sum(), 6)
                         self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(
                             list(p_y["P"].round(6)))
+            # We did a full loop on the generator, need to start it over    
+            generator_y = self.rob_y.generator_credal_set()
