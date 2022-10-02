@@ -5,25 +5,25 @@ import numpy as np
 
 from copulas import min_copula
 from necessity_functions import NecessityUnivariate, NecessityBivariate
-from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate
+from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate, IndexSampling
 
 
 def generator_poss(keys: list) -> dict:
-    for k in range(len(keys)):
-        for i in np.linspace(0, 1, 11):
-            for j in np.linspace(0, 1, 11):
-                a = np.insert(np.array([i, j]), k, 1)
-                yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
+    list_of_ranges = np.array([np.linspace(0,1,11) for k in range(len(keys) - 1)])
+    k_index = IndexSampling([len(k) for k in list_of_ranges])
+    for k in range(len(keys) - 1):
+        a = np.insert(list_of_ranges, k, 1)
+        yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
 
 
 if __name__ == "__main__":
     output_dir = "/work/scratch/malinoro/simulation_copula/out"
     # Possibility distributions
-    possibilities_x = generator_poss(["x1", "x2", "x3"])
-    possibilities_y = generator_poss(["y1", "y2", "y3"])
+    possibilities_x = generator_poss(["x1", "x2", "x3", "x4"])
+    possibilities_y = generator_poss(["y1", "y2", "y3", "y4"])
 
-    order_x_precise = pd.DataFrame(columns=["order"], index=["x1", "x2", "x3"], data=[1, 2, 3])
-    order_y_precise = pd.DataFrame(columns=["order"], index=["y1", "y2", "y3"], data=[1, 2, 3])
+    order_x_precise = pd.DataFrame(columns=["order"], index=["x1", "x2", "x3", "x4"], data=[1, 2, 3, 4])
+    order_y_precise = pd.DataFrame(columns=["order"], index=["y1", "y2", "y3"], data=[1, 2, 3, 4])
 
     for poss_x in possibilities_x:
         for poss_y in possibilities_y:
