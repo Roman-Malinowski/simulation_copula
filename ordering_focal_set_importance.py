@@ -9,11 +9,13 @@ from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivari
 
 
 def generator_poss(keys: list) -> dict:
-    list_of_ranges = np.array([np.linspace(0,1,11) for k in range(len(keys) - 1)])
+    list_of_ranges = np.array([np.linspace(0, 1, 11) for _ in range(len(keys) - 1)])
     k_index = IndexSampling([len(k) for k in list_of_ranges])
-    for k in range(len(keys) - 1):
-        a = np.insert(list_of_ranges, k, 1)
-        yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
+    for k in range(len(keys)):
+        for i in range(np.power(list_of_ranges.shape[1], list_of_ranges.shape[0])):
+            a = np.insert([list_of_ranges[j, k_index.index[j]] for j in range(len(list_of_ranges))], k, 1)
+            k_index.next()
+            yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
 
 
 if __name__ == "__main__":
@@ -23,7 +25,7 @@ if __name__ == "__main__":
     possibilities_y = generator_poss(["y1", "y2", "y3", "y4"])
 
     order_x_precise = pd.DataFrame(columns=["order"], index=["x1", "x2", "x3", "x4"], data=[1, 2, 3, 4])
-    order_y_precise = pd.DataFrame(columns=["order"], index=["y1", "y2", "y3"], data=[1, 2, 3, 4])
+    order_y_precise = pd.DataFrame(columns=["order"], index=["y1", "y2", "y3", "y4"], data=[1, 2, 3, 4])
 
     for poss_x in possibilities_x:
         for poss_y in possibilities_y:
