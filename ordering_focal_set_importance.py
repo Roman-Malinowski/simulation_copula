@@ -2,6 +2,7 @@ import itertools
 import pandas as pd
 import os.path
 import numpy as np
+from numpy.random import default_rng
 
 from copulas import min_copula
 from necessity_functions import NecessityUnivariate, NecessityBivariate
@@ -17,32 +18,48 @@ def generator_poss(keys: list) -> dict:
             k_index.next()
             yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
 
+def random_generator_poss(keys: list, seed=1, max_iter=1000) -> dict:
+    rng = default_rng(seed)
+    values = np.zeros(len(keys))
+    for _ in range(max_iter):
+        n_ones = rng.choice(len(keys), size=rng.choice(range(1, len(keys))), replace=False)
+        rand = [rng.random() for _ in range(len(keys())-len(n_ones))]
+        values[n_ones] = 1.0
+        mask = np.ones(values.shape, dtype=bool)
+        mask[n_ones] = False
+        values[mask] = rand
+        yield values
 
 if __name__ == "__main__":
     output_dir = "/work/scratch/malinoro/simulation_copula/out"
     output_file = "orders.csv"
     
-    #x_space = ["x1", "x2", "x3", "x4"]
-    #y_space = ["y1", "y2", "y3", "y4"]
+    # x_space = ["x1", "x2", "x3", "x4"]
+    # y_space = ["y1", "y2", "y3", "y4"]
     x_space = ["x1", "x2", "x3"]
     y_space = ["y1", "y2", "y3"]
 
     # Possibility distributions
     possibilities_x = generator_poss(x_space)
     possibilities_y = generator_poss(y_space)
+    
+    # rng = default_rng(42)
+
 
     order_x_precise = pd.DataFrame(columns=["order"], index=x_space, data=range(1, len(x_space) + 1))
     order_y_precise = pd.DataFrame(columns=["order"], index=y_space, data=range(1, len(y_space) + 1))
 
     # Initializing the output file
-    multi = pd.MultiIndex.from_tuples(list(
+    multi_col = pd.MultiIndex.from_tuples(list(
         zip(["poss"] * (len(x_space) + len(y_space)) + ["focal_sets", "focal_sets"],
             x_space + y_space + ["X", "Y"])), names=["Object", "Space"])
-    final_df = pd.DataFrame(columns=multi)
+    multi_index = pd.MultiIndex.from_product([pd.Index(name = "poss", data=[]), pd.Index(name="order", data=[])])
+    
+    final_df = pd.DataFrame(columns=multi_col, index=multi_index)
     final_df.to_csv(os.path.join(output_dir, output_file))
 
-    n_order = 0
-
+    n_poss = -1
+    
     for poss_x in possibilities_x:
         
         flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
@@ -55,10 +72,13 @@ if __name__ == "__main__":
         
         for poss_y in possibilities_y:
             
-            flag_skip |= np.all([k==0. or k==1. for k in poss_y.values()])
+            flag_skip = np.all([k==0. or k==1. for k in poss_y.values()])
             if flag_skip:
                 flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
                 continue
+ 
+            # Now that we have a valid poss_x and poss_y
+            n_poss += 1
 
             # Finding focal sets
             nec_y_vanilla = NecessityUnivariate(poss_y)
@@ -68,7 +88,9 @@ if __name__ == "__main__":
             rob_xy.approximate_robust_credal_set()
 
             flag_order_work = False
-
+            
+            n_order = 0
+            
             for perm_x in itertools.permutations(range(1, len(nec_x_vanilla.mass.index) + 1)):
                 order_x = pd.DataFrame(columns=["order"], index=nec_x_vanilla.mass.index, data=perm_x)
                 nec_x = NecessityUnivariate(poss_x, order_x)
@@ -81,23 +103,23 @@ if __name__ == "__main__":
 
                     if ((rob_xy.approximation["P_inf"] - nec_xy.necessity["Nec"]) > - rob_xy.rob_x.epsilon).all():
                         flag_order_work = True
-                        final_df.loc[n_order, [("poss", k) for k in poss_x.keys()]] = poss_x.values()
-                        final_df.loc[n_order, [("poss", k) for k in poss_y.keys()]] = poss_y.values()
-                        final_df.loc[n_order, [("focal_sets", "X")]] = "<".join(
+                        final_df.loc[(n_poss, n_order), [("poss", k) for k in poss_x.keys()]] = poss_x.values()
+                        final_df.loc[(n_poss, n_order), [("poss", k) for k in poss_y.keys()]] = poss_y.values()
+                        final_df.loc[(n_poss, n_order), [("focal_sets", "X")]] = "<".join(
                             order_x.sort_values(axis=0, by=["order"]).index)
-                        final_df.loc[n_order, [("focal_sets", "Y")]] = "<".join(
+                        final_df.loc[(n_poss, n_order), [("focal_sets", "Y")]] = "<".join(
                             order_y.sort_values(axis=0, by=["order"]).index)
                         final_df.to_csv(os.path.join(output_dir, output_file), mode='a', header=False)
-                        final_df.drop(axis=0, labels=[n_order], inplace=True)
+                        final_df.drop(axis=0, labels=[(n_poss, n_order)], inplace=True)
                         n_order += 1
 
             if not flag_order_work:
-                nec_xy.nec_x.mass.to_csv(os.path.join(output_dir, "%s_Nec_x.csv" % n_order))
-                nec_xy.nec_y.mass.to_csv(os.path.join(output_dir, "%s_Nec_y.csv" % n_order))
+                nec_xy.nec_x.mass.to_csv(os.path.join(output_dir, "%s_%s_Nec_x.csv" % (n_poss, n_order)))
+                nec_xy.nec_y.mass.to_csv(os.path.join(output_dir, "%s_%s_Nec_y.csv" % (n_poss, n_order)))
 
-                rob_xy.approximation.to_csv(os.path.join(output_dir, "%s_P_inf.csv" % n_order))
+                rob_xy.approximation.to_csv(os.path.join(output_dir, "%s_P_inf.csv" % n_poss))
 
                 n_order += 1
-
+             
         possibilities_y = generator_poss(y_space)
     
