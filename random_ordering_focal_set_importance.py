@@ -58,15 +58,13 @@ if __name__ == "__main__":
 
     n_poss = -1
     
-    while True:
-        poss_x = possibilities_x.next()
+    for poss_x, poss_y in zip(possibilities_x, possibilities_y):
         logging.info("Poss X: ", str(poss_x)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
         if flag_skip:
             logging.info("Skipping this possibility")
             continue
         
-        poss_y = possibilities_y.next()
         logging.info("Poss Y: ", str(poss_y)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_y.values()])
         if flag_skip:
