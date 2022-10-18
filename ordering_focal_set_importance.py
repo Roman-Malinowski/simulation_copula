@@ -20,11 +20,11 @@ def generator_poss(keys: list) -> dict:
             yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
 
 
-def random_generator_poss(keys: list, seed=1, max_iter=1000) -> dict:
+def random_generator_poss(keys: list, seed=1) -> dict:
     rng = default_rng(seed)
     n = len(keys)
     values = np.zeros(n)
-    for _ in range(max_iter):
+    while True:
         n_ones = rng.choice(n, size=rng.choice(range(1, n), p=[0.7] + [0.3/(n-2)]*(n-2)), replace=False)
         rand = [np.round(rng.random(), 2) for _ in range(n-len(n_ones))]
         values[n_ones] = 1.0
