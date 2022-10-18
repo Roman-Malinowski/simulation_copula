@@ -19,38 +19,22 @@ def generator_poss(keys: list) -> dict:
             k_index.next()
             yield {keys[ind]: np.round(a[ind], 3) for ind in range(len(keys))}
 
-
-def random_generator_poss(keys: list, seed=1) -> dict:
-    rng = default_rng(seed)
-    n = len(keys)
-    values = np.zeros(n)
-    while True:
-        n_ones = rng.choice(n, size=rng.choice(range(1, n), p=[0.7] + [0.3/(n-2)]*(n-2)), replace=False)
-        rand = [np.round(rng.random(), 2) for _ in range(n-len(n_ones))]
-        values[n_ones] = 1.0
-        mask = np.ones(values.shape, dtype=bool)
-        mask[n_ones] = False
-        values[mask] = rand
-        yield {keys[ind]: values[ind] for ind in range(n)}
-
-
 if __name__ == "__main__":
     output_dir = "/work/scratch/malinoro/simulation_copula/out"
-    output_file = "random_orders_N4.csv"
+    output_file = "orders_N3_min.csv"
     
     logging.basicConfig(filename=os.path.join(output_dir, output_file.split(".csv")[0] + ".log"), format="%(asctime)s | %(levelname)s: %(message)s", level=logging.DEBUG)
 
     logging.info("Starting the log file") 
     
-    x_space = ["x1", "x2", "x3", "x4"]
-    y_space = ["y1", "y2", "y3", "y4"]
-    # x_space = ["x1", "x2", "x3"]
-    # y_space = ["y1", "y2", "y3"]
+    x_space = ["x1", "x2", "x3"]
+    y_space = ["y1", "y2", "y3"]
+    
+    copula = lukaciewicz_copula
 
     # Possibility distributions
-    possibilities_x = random_generator_poss(x_space)
-    #possibilities_y = generator_poss(y_space)
-    possibilities_y = random_generator_poss(y_space, seed=2)
+    possibilities_x = generator_poss(x_space)
+    possibilities_y = generator_poss(y_space)
 
     order_x_precise = pd.DataFrame(columns=["order"], index=x_space, data=range(1, len(x_space) + 1))
     order_y_precise = pd.DataFrame(columns=["order"], index=y_space, data=range(1, len(y_space) + 1))
@@ -94,7 +78,7 @@ if __name__ == "__main__":
             nec_y_vanilla = NecessityUnivariate(poss_y)
             rob_y = RobustCredalSetUnivariate(nec_y_vanilla, samples_per_interval=5)
             
-            rob_xy = RobustCredalSetBivariate(rob_x, rob_y, order_x_precise, order_y_precise, lukaciewicz_copula)
+            rob_xy = RobustCredalSetBivariate(rob_x, rob_y, order_x_precise, order_y_precise, copula)
             logging.info("Computing robust credal set...")
             rob_xy.approximate_robust_credal_set()
 
@@ -110,7 +94,7 @@ if __name__ == "__main__":
                     order_y = pd.DataFrame(columns=["order"], index=nec_y_vanilla.mass.index, data=perm_y)
                     nec_y = NecessityUnivariate(poss_y, order_y)
 
-                    nec_xy = NecessityBivariate(nec_x, nec_y, lukaciewicz_copula)
+                    nec_xy = NecessityBivariate(nec_x, nec_y, copula)
 
                     if ((rob_xy.approximation["P_inf"] - nec_xy.necessity["Nec"]) > - rob_xy.rob_x.epsilon).all():
                         flag_order_work = True
