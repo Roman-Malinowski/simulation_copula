@@ -25,11 +25,7 @@ def random_generator_poss(keys: list, seed=1) -> dict:
 
 if __name__ == "__main__":
     output_dir = "/work/scratch/malinoro/simulation_copula/out"
-    output_file = "random_orders_N4.csv"
-    
-    logging.basicConfig(filename=os.path.join(output_dir, output_file.split(".csv")[0] + ".log"), format="%(asctime)s | %(levelname)s: %(message)s", level=logging.DEBUG)
-
-    logging.info("Starting the log file") 
+    output_file = "random_orders_N4_luka.csv"
     
     x_space = ["x1", "x2", "x3", "x4"]
     y_space = ["y1", "y2", "y3", "y4"]
@@ -37,6 +33,14 @@ if __name__ == "__main__":
     # y_space = ["y1", "y2", "y3"]
     
     copula = lukaciewicz_copula
+    # copula = min_copula
+
+    resume_computation = True
+    
+    logging.basicConfig(filename=os.path.join(output_dir, output_file.split(".csv")[0] + ".log"), format="%(asctime)s | %(levelname)s: %(message)s", level=logging.DEBUG)
+    
+    logging.info("Starting the log file") 
+    
 
     # Possibility distributions
     possibilities_x = random_generator_poss(x_space)
@@ -47,25 +51,41 @@ if __name__ == "__main__":
     logging.info("Order X: " + str(order_x_precise))
     logging.info("Order Y: " + str(order_y_precise))
 
-    # Initializing the output file
+    # Initializing the dataframe that stores results
     multi_col = pd.MultiIndex.from_tuples(list(
         zip(["poss"] * (len(x_space) + len(y_space)) + ["focal_sets", "focal_sets"],
             x_space + y_space + ["X", "Y"])), names=["Object", "Space"])
     multi_index = pd.MultiIndex.from_product([pd.Index(name = "poss", data=[]), pd.Index(name="order", data=[])])
     
     final_df = pd.DataFrame(columns=multi_col, index=multi_index)
-    final_df.to_csv(os.path.join(output_dir, output_file))
+    
+    if resume_computation:
+        df = pd.read_csv(os.path.join(output_dir, output_file), header=[0,1], index_col=[0,1])
+        n_resume = max(df.index.get_level_values(level="poss"))
+        del df
+        logging.info("Resuming at possibility number %s" % n_resume) 
+    else:
+        # Initializing the output file
+        final_df.to_csv(os.path.join(output_dir, output_file))
 
-    n_poss = -1
+        n_resume = -1
+    
+        logging.info("Starting at possibility number %s" % 0) 
+    
+    n_poss= -1
     
     for poss_x, poss_y in zip(possibilities_x, possibilities_y):
-        logging.info("Poss X: ", str(poss_x)) 
+        if n_poss < n_resume:
+            n_poss += 1
+            continue
+
+        logging.info("Poss X: " + str(poss_x)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
         if flag_skip:
             logging.info("Skipping this possibility")
             continue
         
-        logging.info("Poss Y: ", str(poss_y)) 
+        logging.info("Poss Y: " + str(poss_y)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_y.values()])
         if flag_skip:
             logging.info("Skipping this possibility")
@@ -108,7 +128,7 @@ if __name__ == "__main__":
                         order_x.sort_values(axis=0, by=["order"]).index)
                     final_df.loc[(n_poss, n_order), [("focal_sets", "Y")]] = "<".join(
                         order_y.sort_values(axis=0, by=["order"]).index)
-                    logging.info("Writing premutation %s" % n_order)
+                    logging.info("Writing poss %s premutation %s" % (n_poss, n_order))
                     final_df.to_csv(os.path.join(output_dir, output_file), mode='a', header=False)
                     final_df.drop(axis=0, labels=[(n_poss, n_order)], inplace=True)
                     n_order += 1

@@ -53,7 +53,7 @@ if __name__ == "__main__":
     n_poss = -1
     
     for poss_x in possibilities_x:
-        logging.info("Poss X: ", str(poss_x)) 
+        logging.info("Poss X: " + str(poss_x)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
         if flag_skip:
             logging.info("Skipping this possibility")
@@ -64,7 +64,7 @@ if __name__ == "__main__":
         rob_x = RobustCredalSetUnivariate(nec_x_vanilla, samples_per_interval=5)
         
         for poss_y in possibilities_y:
-            logging.info("Poss Y: ", str(poss_y)) 
+            logging.info("Poss Y: " + str(poss_y)) 
             flag_skip = np.all([k==0. or k==1. for k in poss_y.values()])
             if flag_skip:
                 logging.info("Skipping this possibility")
@@ -104,7 +104,7 @@ if __name__ == "__main__":
                             order_x.sort_values(axis=0, by=["order"]).index)
                         final_df.loc[(n_poss, n_order), [("focal_sets", "Y")]] = "<".join(
                             order_y.sort_values(axis=0, by=["order"]).index)
-                        logging.info("Writing premutation %s" % n_order)
+                        logging.info("Writing perm %s premutation %s" % (n_poss, n_order))
                         final_df.to_csv(os.path.join(output_dir, output_file), mode='a', header=False)
                         final_df.drop(axis=0, labels=[(n_poss, n_order)], inplace=True)
                         n_order += 1
