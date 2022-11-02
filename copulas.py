@@ -87,3 +87,17 @@ def product_copula(u: float, v: float):
         v = max(0., v)
         v = min(1., v)
     return u*v
+
+
+def frank_copula(u: float, v: float, theta: float):
+    if 0. > u or 1. < u or 0 > v or 1 < v:
+        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
+                      "Cropping the values." % (u, v), UserWarning)
+        u = max(0., u)
+        u = min(1., u)
+        v = max(0., v)
+        v = min(1., v)
+    if theta == 0:
+        err = "Theta should not be equal to 0"
+        raise ValueError(err)
+    return -np.log(1 + (np.exp(-theta*u) - 1) * (np.exp(-theta*v) - 1) / (np.exp(-theta) - 1)) / theta 
