@@ -5,7 +5,7 @@ import numpy as np
 from numpy.random import default_rng
 import logging
 
-from copulas import min_copula, lukaciewicz_copula
+from copulas import min_copula, lukaciewicz_copula, frank_copula
 from necessity_functions import NecessityUnivariate, NecessityBivariate
 from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate, IndexSampling
 
@@ -25,17 +25,22 @@ def random_generator_poss(keys: list, seed=1) -> dict:
 
 if __name__ == "__main__":
     output_dir = "/work/scratch/malinoro/simulation_copula/out"
-    output_file = "random_orders_N4_luka.csv"
+    output_file = "random_orders_N3_frank_-5.csv"
     
-    x_space = ["x1", "x2", "x3", "x4"]
-    y_space = ["y1", "y2", "y3", "y4"]
-    # x_space = ["x1", "x2", "x3"]
-    # y_space = ["y1", "y2", "y3"]
+    # x_space = ["x1", "x2", "x3", "x4"]
+    # y_space = ["y1", "y2", "y3", "y4"]
+    x_space = ["x1", "x2", "x3"]
+    y_space = ["y1", "y2", "y3"]
     
-    copula = lukaciewicz_copula
+    theta = -5
+
+    def copula(u,v):
+        return frank_copula(u, v, theta)
+    # copula = lukaciewicz_copula
     # copula = min_copula
 
-    resume_computation = True
+    resume_computation = False
+
     
     logging.basicConfig(filename=os.path.join(output_dir, output_file.split(".csv")[0] + ".log"), format="%(asctime)s | %(levelname)s: %(message)s", level=logging.DEBUG)
     
