@@ -1,11 +1,14 @@
+#!/usr/bin/python
+
 import itertools
 import pandas as pd
 import os.path
+import sys
 import numpy as np
 from numpy.random import default_rng
 import logging
 
-from copulas import min_copula, lukaciewicz_copula, frank_copula
+from copulas import min_copula, lukaciewicz_copula, frank_copula, ali_mikhail_haq_copula, clayton_copula, gumbel_copula
 from necessity_functions import NecessityUnivariate, NecessityBivariate
 from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate, IndexSampling
 
@@ -24,29 +27,69 @@ def random_generator_poss(keys: list, seed=1) -> dict:
 
 
 if __name__ == "__main__":
-    output_dir = "/work/scratch/malinoro/simulation_copula/out"
-    output_file = "random_orders_N3_frank_-5.csv"
-    
-    # x_space = ["x1", "x2", "x3", "x4"]
-    # y_space = ["y1", "y2", "y3", "y4"]
-    x_space = ["x1", "x2", "x3"]
-    y_space = ["y1", "y2", "y3"]
-    
-    theta = -5
-
-    def copula(u,v):
-        return frank_copula(u, v, theta)
-    # copula = lukaciewicz_copula
-    # copula = min_copula
 
     resume_computation = False
-
     
+    output_dir = sys.argv[1] 
+    output_file = sys.argv[2] 
+    n_dim = sys.argv[3]
+
     logging.basicConfig(filename=os.path.join(output_dir, output_file.split(".csv")[0] + ".log"), format="%(asctime)s | %(levelname)s: %(message)s", level=logging.DEBUG)
     
     logging.info("Starting the log file") 
     
+    if n_dim == "N4":
+        x_space = ["x1", "x2", "x3", "x4"]
+        y_space = ["y1", "y2", "y3", "y4"]
+        
+        logging.info("Dimension: N4")
+    else:
+        x_space = ["x1", "x2", "x3"]
+        y_space = ["y1", "y2", "y3"]
+        
+        logging.info("Dimension: N3")
 
+
+    arg_copula = sys.argv[4]
+    if arg_copula=="min_copula":
+        copula = min_copula
+        logging.info("Copula: %s" % arg_copula)
+    
+    elif arg_copula=="lukaciewicz_copula":
+        copula = lukaciewicz_copula
+        logging.info("Copula: %s" % arg_copula)
+    
+    elif arg_copula=="frank_copula":
+        theta = float(sys.argv[5])
+        def copula(u, v):
+            return frank_copula(u, v, theta)
+        logging.info("Copula: %s" % arg_copula)
+        logging.info("Theta: %s" % sys.argv[5])
+    
+    elif arg_copula=="ali_mikhail_haq_copula":
+        theta = float(sys.argv[5])
+        def copula(u, v):
+            return ali_mikhail_haq_copula(u, v, theta)
+        logging.info("Copula: %s" % arg_copula)
+        logging.info("Theta: %s" % sys.argv[5])
+    
+    elif arg_copula=="clayton_copula":
+        theta = float(sys.argv[5])
+        def copula(u, v):
+            return clayton_copula(u, v, theta)
+        logging.info("Copula: %s" % arg_copula)
+        logging.info("Theta: %s" % sys.argv[5])
+    
+    elif arg_copula=="gumbel_copula":
+        theta = float(sys.argv[5])
+        def copula(u, v):
+            return gumbel_copula(u, v, theta)
+        logging.info("Copula: %s" % arg_copula)
+        logging.info("Theta: %s" % sys.argv[5])
+    
+    else:
+        raise(ValueError("The copula you requested is not supported: %s" % arg_copula)) 
+    
     # Possibility distributions
     possibilities_x = random_generator_poss(x_space)
     possibilities_y = random_generator_poss(y_space, seed=2)
@@ -140,9 +183,10 @@ if __name__ == "__main__":
 
         if not flag_order_work:
             logging.debug("No order is working!")
-            nec_xy.nec_x.mass.to_csv(os.path.join(output_dir, "%s_%s_Nec_x.csv" % (n_poss, n_order)))
-            nec_xy.nec_y.mass.to_csv(os.path.join(output_dir, "%s_%s_Nec_y.csv" % (n_poss, n_order)))
-
-            rob_xy.approximation.to_csv(os.path.join(output_dir, "%s_P_inf.csv" % n_poss))
-
+            
+            final_df.loc[(n_poss, n_order), [("poss", k) for k in poss_x.keys()]] = poss_x.values()
+            final_df.loc[(n_poss, n_order), [("poss", k) for k in poss_y.keys()]] = poss_y.values()
+            final_df.loc[(n_poss, n_order), ("focal_sets",)] = [None, None]
+            final_df.to_csv(os.path.join(output_dir, output_file), mode='a', header=False)
+            final_df.drop(axis=0, labels=[(n_poss, n_order)], inplace=True)
             n_order += 1
