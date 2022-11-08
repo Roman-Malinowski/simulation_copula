@@ -10,8 +10,7 @@ def min_copula(u: float, v: float) -> float:
     :return: a float between 0 and 1 corresponding to C(u,v)
     """
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -27,8 +26,7 @@ def lukaciewicz_copula(u: float, v: float) -> float:
     :return: a float between 0 and 1 corresponding to C(u,v)
     """
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -38,8 +36,7 @@ def lukaciewicz_copula(u: float, v: float) -> float:
 
 def ali_mikhail_haq_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -47,13 +44,15 @@ def ali_mikhail_haq_copula(u: float, v: float, theta: float):
     if theta < -1 or theta >= 1:
         err = "Theta should be in [-1, 1[: theta=%s" % theta
         raise ValueError(err)
-    return u * v / (1 - theta * (1 - u) * (1 - v))
+    if u==0. or v==0.:
+        return 0.
+    else:
+        return u * v / (1 - theta * (1 - u) * (1 - v))
 
 
 def clayton_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -61,13 +60,15 @@ def clayton_copula(u: float, v: float, theta: float):
     if theta < -1 or theta == 0:
         err = "Theta should be in [-1, infty[ / {0}: theta=%s" % theta
         raise ValueError(err)
-    return max(u**(-theta) + v**(-theta) - 1, 0)**(-1/theta)
+    if u==0. or v==0.:
+        return 0.
+    else:
+        return max(u**(-theta) + v**(-theta) - 1, 0)**(-1/theta)
 
 
 def gumbel_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -75,13 +76,15 @@ def gumbel_copula(u: float, v: float, theta: float):
     if theta <= 0 or theta > 1:
         err = "Theta should be in ]0, 1]: theta=%s" % theta
         raise ValueError(err)
-    return u*v*np.exp(-theta*np.log(u)*np.log(v))
+    if u==0. or v==0.:
+        return 0.
+    else:
+        return u*v*np.exp(-theta*np.log(u)*np.log(v))
 
 
 def product_copula(u: float, v: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -91,8 +94,7 @@ def product_copula(u: float, v: float):
 
 def frank_copula(u: float, v: float, theta: float):
     if 0. > u or 1. < u or 0 > v or 1 < v:
-        warnings.warn("u and v should be between 1 and 0. u=%s ; b=%s\\"
-                      "Cropping the values." % (u, v), UserWarning)
+        warnings.warn("u and v should be between 1 and 0. u=%s | v=%s\nCropping the values." % (u, v), UserWarning)
         u = max(0., u)
         u = min(1., u)
         v = max(0., v)
@@ -100,4 +102,7 @@ def frank_copula(u: float, v: float, theta: float):
     if theta == 0:
         err = "Theta should not be equal to 0"
         raise ValueError(err)
-    return -np.log(1 + (np.exp(-theta*u) - 1) * (np.exp(-theta*v) - 1) / (np.exp(-theta) - 1)) / theta 
+    if u==0. or v==0.:
+        return 0.
+    else:
+        return -np.log(1 + (np.exp(-theta*u) - 1) * (np.exp(-theta*v) - 1) / (np.exp(-theta) - 1)) / theta 
