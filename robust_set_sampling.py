@@ -19,7 +19,8 @@ class RobustCredalSetUnivariate:
 
         self.prob_range = pd.DataFrame(columns=["Nec", "Pl"], index=pd.Index(self.nec.atoms).union(self.nec.mass.index))
         self.compute_prob_range()
-
+        
+        self.samples = self.generate_samples()
         self.generator = self.generator_credal_set()
 
     def compute_prob_range(self) -> None:
@@ -28,55 +29,48 @@ class RobustCredalSetUnivariate:
 
             intersection = [len(set(event.split(",")) & set(k.split(","))) > 0 for k in self.nec.mass.index]
             self.prob_range.loc[event, "Pl"] = self.nec.mass[intersection]["mass"].sum()
+    
+    
+    def generate_samples(self) -> pd.DataFrame:
+        """
+        Functions that generate Probabilities sampled from the credal set.
+        It discretizes the probability range on atoms (linspace(Nec, Pl, samples_per_interval)
+        It then do a cartesian product on those discretized ranges, and filter incoherent probabilities
+        It also filters probabilities that does not respect Nec condition on the focal sets (because it comes from a possibility, it is sufficient)
+        Return a pd.DataFrame with columns being the atoms and each row a different probability mass.
+            x1   x2   x3
+        0  0.5  0.2  0.3
+        1  0.2  0.2  0.6
+        2  0.1  0.7  0.2
 
+        """
+                # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
+        list_of_ranges = [np.linspace(self.prob_range.loc[atom, "Nec"], self.prob_range.loc[atom, "Pl"],
+                                      num=self.samples_per_interval) for k in list(self.nec.atoms)[:-1]]
+        
+        cartesian_product = np.empty([len(a) for a in list_of_ranges] + [len(list_of_ranges)], dtype=float)  # Creates an empty array with correct dimensions
+        for i, a in enumerate(np.ix_(*list_of_ranges)):
+            cartesian_product[..., i] = a
+        cartesian_product = cartesian_product.reshape(-1, len(list_of_ranges))  # Reshaping so it is of shape (samples_per_interval**(n-1), n-1)
+        
+        cartesian_product = np.hstack((cartesian_product, 1-np.expand_dims(np.sum(cartesian_product, axis=1), axis=1)))  # Adding the value of the last atom because P is normalized
+        cartesian_product = cartesian_product[np.all(0 <= cartesian_product, axis=1) & np.all(cartesian_product<=1, axis=1)]  # Keeping only rows where P is in [0,1]
+        
+        p = pd.DataFrame(columns=pd.Index(self.nec.atoms), data=cartesian_product, dtype=float)
+        
+        # Removing P that are not respecting the necessity condition on focal sets 
+        for focal_set in self.nec.mass.index:
+            nec = self.prob_range.loc[focal_set, "Nec"] - self.epsilon
+            p = p[p.loc[:, focal_set.split(",")].sum(axis=1) >= nec]
+        return p
+    
+    
     def generator_credal_set(self) -> pd.DataFrame:
         """
         Generator function for probabilities. Yields a sampled probability respecting the probability ranges on atoms
         """
-        p = pd.DataFrame(columns=["P"], index=pd.Index(self.nec.atoms), dtype=float)
-
-        # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
-        list_of_ranges = [np.linspace(self.prob_range.loc[p.index[k], "Nec"], self.prob_range.loc[p.index[k], "Pl"],
-                                      num=self.samples_per_interval) for k in range(len(self.nec.atoms) - 1)]
-        k_index = IndexSampling([len(k) for k in list_of_ranges])
-        for _ in range(np.product(k_index.max_range)):
-            x = []
-            for k in range(len(list_of_ranges)):
-                x += [list_of_ranges[k][k_index.index[k]]]
-            x += [1 - sum(x)]
-            p.loc[:, "P"] = x
-            k_index.next()
-
-            continue_flag = False
-            if np.any(p["P"] < 0):
-                continue_flag = True 
-                
-            for focal_set in self.nec.mass.index:
-                # Because it is from a Necessity function, checking on focal sets is enough
-                if p.loc[focal_set.split(","), "P"].sum() < self.prob_range.loc[focal_set, "Nec"] - self.epsilon:
-                    continue_flag = True 
-            if continue_flag:
-                continue
-            yield p
-
-
-class IndexSampling:
-
-    def __init__(self, dim_sizes: list):
-        self.index = np.zeros(len(dim_sizes), dtype=int)
-        self.max_range = np.array(dim_sizes, dtype=int)
-
-    def increment_bit(self, i: int) -> None:
-        if i == -1:
-            self.index[:] = 0
-        else:
-            self.index[i] += 1
-            if self.index[i] == self.max_range[i]:
-                self.index[i:] = 0
-                self.increment_bit(i - 1)
-
-    def next(self):
-        self.increment_bit(len(self.index) - 1)
+        for k in range(self.samples.index):
+            yield p.loc[k, :]
 
 
 class RobustCredalSetBivariate:
@@ -88,57 +82,56 @@ class RobustCredalSetBivariate:
 
         self.rob_x = rob_x
         self.rob_y = rob_y
-        self.copula = copula
+        self.copula = np.vectorize(copula)
 
         self.order_x_p = order_x_p
         self.order_y_p = order_y_p
-
-        self.p_xy = pd.DataFrame(columns=["P"],
-                                 index=pd.MultiIndex.from_product([self.rob_x.nec.atoms, self.rob_y.nec.atoms],
-                                                                  names=["X", "Y"]))
+        
+        self.p_xy = None
+        self.join_proba_on_atoms()
 
         self.approximation = None
-
-    def join_proba_on_atoms(self, p_x: pd.DataFrame, p_y: pd.DataFrame) -> None:
+        
+        
+    def join_proba_on_atoms(self) -> None:
         """
-        Compute the joint probability on atoms from two marginal probabilities,
+        Compute the joint probabilities on atoms from two marginal probabilities,
         with a specified order and a specified copula
-        p_x, p_y: pd.Dataframe with columns 'P'.
-        Example
-            P
-        x1  0.5
-        x2  0.2
-        x3  0.3
-
-        order_x, order_y: pd.DataFrame with column 'order'.
+        order_x_p, order_y_p: pd.DataFrame with column 'order'.
         Example
                 order
         x3        3
         x1        1
         x2        2
-
-        Copula: a function that takes as argument two floats between 0 and 1 and returns the copula on those numbers
         """
-        for a_x, a_y in self.p_xy.index:
-            index = self.order_x_p[self.order_x_p["order"] < self.order_x_p.loc[a_x, "order"]].index
-            sum_x_inf = p_x.loc[index, "P"].sum(axis=0)
-            sum_x_sup = sum_x_inf + float(p_x.loc[a_x, "P"])
+        
+        self.order_x_p = self.order_x_p.sort_values(["order"])
+        self.order_y_p = self.order_y_p.sort_values(["order"])
+        
+        # Cumulated distribution functions
+        c_px = self.rob_x.samples.copy()
+        c_py = self.rob_y.samples.copy()
+        
+        # TODO CARTESIAN PRODUCT OF THOSE TWO 
+        c_px["empty"] = 0
+        c_py["empty"] = 0
+        
+        c_px = c_px[["empty"] + self.order_x_p.index.to_list()].cumsum(axis=1)
+        c_py = c_py[["empty"] + self.order_y_p.index.to_list()].cumsum(axis=1)
+        
+        self.p_xy = pd.DataFrame(columns=pd.MultiIndex.from_product([self.order_x_p.index, self.order_y_p.index], names=["X", "Y"]))
+        
+        for a_x, a_y in self.p_xy.columns:  # atoms
+            i, j = c_px.columns.get_loc(a_x), c_py.columns.get_loc(a_y)
+            self.p_xy[(a_x, a_y)] = self.copula(c_px.columns[i].to_numpy(), c_py.columns[j].to_numpy()) + self.copula(c_px.columns[i-1].to_numpy(), c_py.columns[j-1].to_numpy()) - self.copula(c_px.columns[i-1].to_numpy(), c_py.columns[j].to_numpy()) - self.copula(c_px.columns[i].to_numpy(), c_py.columns[j-1].to_numpy())
+            
 
-            index = self.order_y_p[self.order_y_p["order"] < self.order_y_p.loc[a_y, "order"]].index
-            sum_y_inf = p_y.loc[index, "P"].sum(axis=0)
-            sum_y_sup = sum_y_inf + float(p_y.loc[a_y, "P"])
-
-            self.p_xy.loc[(a_x, a_y), "P"] = self.copula(sum_x_sup, sum_y_sup) - self.copula(sum_x_sup, sum_y_inf) - \
-                                             self.copula(sum_x_inf, sum_y_sup) + self.copula(sum_x_inf, sum_y_inf)
-
+            
     def approximate_robust_credal_set(self) -> None:
         """
-        Approximate the robust credal set from marginal credal sets
+        Approximate the robust credal set from the joint samples
         Output robust_df: A DataFrame with multi index and a single column "P_inf" containing the approximation of the lower
         probability on events.
-
-        We generate sampled marginal probabilities from 'prob_range' and compute the joint_proba_on_atoms from them.
-        Then we compare that to robust_df and keep the lowest proba for every event.
         """
 
         full_events_x = []
@@ -153,20 +146,13 @@ class RobustCredalSetBivariate:
 
         multi = pd.MultiIndex.from_product([full_events_x, full_events_y], names=["X", "Y"])
         self.approximation = pd.DataFrame(columns=["P_inf", "P"], index=multi)
-        self.approximation["P_inf"] = 1
 
-        generator_x = self.rob_x.generator_credal_set()
-        generator_y = self.rob_y.generator_credal_set()
-
-        for p_x in generator_x:
-            for p_y in generator_y:
-                self.join_proba_on_atoms(p_x, p_y)
-                for x, y in self.approximation.index:
-                    x_i, y_i = x.split(","), y.split(",")
-                    atoms = list(itertools.product(*[x_i, y_i]))
-                    if self.approximation.loc[(x, y), "P_inf"] > self.p_xy.loc[atoms, "P"].sum():
-                        self.approximation.loc[(x, y), "P_inf"] = np.round(self.p_xy.loc[atoms, "P"].sum(), 6)
-                        self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(
-                            list(p_y["P"].round(6)))
-            # We did a full loop on the generator, need to start it over    
-            generator_y = self.rob_y.generator_credal_set()
+        for x, y in self.approximation.index:
+            x_i, y_i = x.split(","), y.split(",")
+            atoms = list(itertools.product(*[x_i, y_i]))
+            
+            p_inf = self.p_xy.loc[:, atoms].sum(axis=1)
+            ind = p_inf.argmin()
+            self.approximation.loc[(x, y), "P_inf"] = np.round(p_inf.min(), 6)
+            self.rob_x.samples.loc[ind, :
+            self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(list(p_y["P"].round(6)))
