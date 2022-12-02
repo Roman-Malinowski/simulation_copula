@@ -1,4 +1,5 @@
 # Simulation Copula
+
 This repo contains different script used to investigate on hypothesis concerning copulas applied to imprecise probabilities.
 
 Here is a small sum up of the different scripts:
@@ -13,3 +14,5 @@ And the different notebooks:
 - `Copulas.ipynb` basic notebook to do some test and some verifications. Not interesting
 - `dataframe_analysis.ipynb` Plot figures to visualize marginal necessities and index processing to be sure that we consider the same marginals when comparing different copulas.
 
+## Requirements
+`pandas>=1.2.0' for using `pd.DataFrame.merge(_, how='cross')'

@@ -88,9 +88,9 @@ class RobustCredalSetBivariate:
         self.order_y_p = order_y_p
         
         self.p_xy = None
+        self.approximation = None
         self.join_proba_on_atoms()
 
-        self.approximation = None
         
         
     def join_proba_on_atoms(self) -> None:
@@ -103,6 +103,15 @@ class RobustCredalSetBivariate:
         x3        3
         x1        1
         x2        2
+
+        We create a dataframe c_pxy which stores the CDFs in its columns.
+        We also store the marginal proba that led to it, to avoid computation
+        errors erros when computing it back from the CDF...
+        
+        c_pxy:
+           empty_x   x1   x2   x3  empty_y   y1   y2   y3  P_x1  P_x2  P_x3  P_y1  P_y2  P_y3
+        0    0.0    0.2  0.8  1.0    0.0    0.3  0.5  1.0   0.2   0.6   0.2   0.3   0.2   0.5
+        1    0.0    0.7  1.0  1.0    0.0    0.1  0.9  1.0   0.7   0.3   0.0   0.1   0.8   0.1
         """
         
         self.order_x_p = self.order_x_p.sort_values(["order"])
@@ -112,27 +121,30 @@ class RobustCredalSetBivariate:
         c_px = self.rob_x.samples.copy()
         c_py = self.rob_y.samples.copy()
         
-        # TODO CARTESIAN PRODUCT OF THOSE TWO 
-        c_px["empty"] = 0
-        c_py["empty"] = 0
+        c_px = c_px[self.order_x_p.index.to_list()].cumsum(axis=1)
+        c_py = c_py[self.order_y_p.index.to_list()].cumsum(axis=1)
         
-        c_px = c_px[["empty"] + self.order_x_p.index.to_list()].cumsum(axis=1)
-        c_py = c_py[["empty"] + self.order_y_p.index.to_list()].cumsum(axis=1)
+        # Saving the original probabilities to avoid computing them from the CDF later
+        c_px[["P_" + str(a_x) for a_x in self.order_x_p.index]] = self.rob_x.samples
+        c_py[["P_" + str(a_y) for a_y in self.order_y_p.index]] = self.rob_y.samples
+
+        c_pxy = c_px.merge(c_py, how='cross')
         
-        self.p_xy = pd.DataFrame(columns=pd.MultiIndex.from_product([self.order_x_p.index, self.order_y_p.index], names=["X", "Y"]))
+        assert "empty_x" not in c_px.columns, "'empty_x' cannot be used as an atom's name" 
+        assert "empty_y" not in c_py.columns, "'empty_y' cannot be used as an atom's name" 
+        
+        # Ordering the columns correctly (to simplify H-volume computation)
+        c_pxy["empty_x"], c_pxy["empty_y"] = 0, 0
+        cols = ["empty_x"] + self.order_x_p.index.to_list() + ["empty_y"] + self.order_y_p.index.to_list()
+        cols = cols + [c for c in c_pxy.columns if c not it cols]
+        c_pxy = c_pxy[cols]
+
+        self.p_xy = pd.DataFrame(columns=pd.MultiIndex.from_product([self.order_x_p.index, self.order_y_p.index], names=["X", "Y"]), dtype=float)
         
         for a_x, a_y in self.p_xy.columns:  # atoms
-            i, j = c_px.columns.get_loc(a_x), c_py.columns.get_loc(a_y)
-            self.p_xy[(a_x, a_y)] = self.copula(c_px.columns[i].to_numpy(), c_py.columns[j].to_numpy()) + self.copula(c_px.columns[i-1].to_numpy(), c_py.columns[j-1].to_numpy()) - self.copula(c_px.columns[i-1].to_numpy(), c_py.columns[j].to_numpy()) - self.copula(c_px.columns[i].to_numpy(), c_py.columns[j-1].to_numpy())
+            i, j = c_pxy.columns.get_loc(a_x), c_pxy.columns.get_loc(a_y)
+            self.p_xy[(a_x, a_y)] = self.copula(c_pxy.columns[i].to_numpy(), c_pxy.columns[j].to_numpy()) + self.copula(c_pxy.columns[i-1].to_numpy(), c_pxy.columns[j-1].to_numpy()) - self.copula(c_pxy.columns[i-1].to_numpy(), c_pxy.columns[j].to_numpy()) - self.copula(c_pxy.columns[i].to_numpy(), c_pxy.columns[j-1].to_numpy())
             
-
-            
-    def approximate_robust_credal_set(self) -> None:
-        """
-        Approximate the robust credal set from the joint samples
-        Output robust_df: A DataFrame with multi index and a single column "P_inf" containing the approximation of the lower
-        probability on events.
-        """
 
         full_events_x = []
         # self.order_x_p.index is basically ["x1", "x2", "x3"] (=X). full_events_x is thus the power set of X
@@ -152,7 +164,7 @@ class RobustCredalSetBivariate:
             atoms = list(itertools.product(*[x_i, y_i]))
             
             p_inf = self.p_xy.loc[:, atoms].sum(axis=1)
-            ind = p_inf.argmin()
             self.approximation.loc[(x, y), "P_inf"] = np.round(p_inf.min(), 6)
-            self.rob_x.samples.loc[ind, :
-            self.approximation.loc[(x, y), "P"] = str(list(p_x["P"].round(6))) + " | " + str(list(p_y["P"].round(6)))
+            
+            ind = p_inf.argmin()
+            self.approximation.loc[(x, y), "P"] = ", ".join(c_pxy.loc[ind, ["P_" + str(a_x) for a_x in self.order_x_p.index]].astype(dtype=str)) + " | " ", ".join(c_pxy.loc[ind, ["P_" + str(a_y) for a_y in self.order_y_p.index]].astype(dtype=str))
