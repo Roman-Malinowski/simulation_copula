@@ -44,17 +44,24 @@ class RobustCredalSetUnivariate:
         2  0.1  0.7  0.2
 
         """
-                # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
+        # We don't care about Nec and Pl of the final atom because it will be set to 1-P(x1,...,xn-1)
         list_of_ranges = [np.linspace(self.prob_range.loc[atom, "Nec"], self.prob_range.loc[atom, "Pl"],
-                                      num=self.samples_per_interval) for k in list(self.nec.atoms)[:-1]]
+                                      num=self.samples_per_interval) for atom in list(self.nec.atoms)[:-1]]
         
-        cartesian_product = np.empty([len(a) for a in list_of_ranges] + [len(list_of_ranges)], dtype=float)  # Creates an empty array with correct dimensions
+        # Creates an empty array with correct dimensions
+        cartesian_product = np.empty([len(a) for a in list_of_ranges] + [len(list_of_ranges)], dtype=float)
+
         for i, a in enumerate(np.ix_(*list_of_ranges)):
             cartesian_product[..., i] = a
-        cartesian_product = cartesian_product.reshape(-1, len(list_of_ranges))  # Reshaping so it is of shape (samples_per_interval**(n-1), n-1)
+
+        # Reshaping so it is of shape (samples_per_interval**(n-1), n-1)
+        cartesian_product = cartesian_product.reshape(-1, len(list_of_ranges))  
         
-        cartesian_product = np.hstack((cartesian_product, 1-np.expand_dims(np.sum(cartesian_product, axis=1), axis=1)))  # Adding the value of the last atom because P is normalized
-        cartesian_product = cartesian_product[np.all(0 <= cartesian_product, axis=1) & np.all(cartesian_product<=1, axis=1)]  # Keeping only rows where P is in [0,1]
+        # Adding the value of the last atom because P is normalized
+        cartesian_product = np.hstack((cartesian_product, 1-np.expand_dims(np.sum(cartesian_product, axis=1), axis=1)))  
+        
+        # Keeping only rows where P is in [0,1]
+        cartesian_product = cartesian_product[np.all(0 <= cartesian_product, axis=1) & np.all(cartesian_product<=1, axis=1)]  
         
         p = pd.DataFrame(columns=pd.Index(self.nec.atoms), data=cartesian_product, dtype=float)
         
@@ -136,14 +143,14 @@ class RobustCredalSetBivariate:
         # Ordering the columns correctly (to simplify H-volume computation)
         c_pxy["empty_x"], c_pxy["empty_y"] = 0, 0
         cols = ["empty_x"] + self.order_x_p.index.to_list() + ["empty_y"] + self.order_y_p.index.to_list()
-        cols = cols + [c for c in c_pxy.columns if c not it cols]
+        cols = cols + [c for c in c_pxy.columns if c not in cols]
         c_pxy = c_pxy[cols]
 
         self.p_xy = pd.DataFrame(columns=pd.MultiIndex.from_product([self.order_x_p.index, self.order_y_p.index], names=["X", "Y"]), dtype=float)
         
         for a_x, a_y in self.p_xy.columns:  # atoms
             i, j = c_pxy.columns.get_loc(a_x), c_pxy.columns.get_loc(a_y)
-            self.p_xy[(a_x, a_y)] = self.copula(c_pxy.columns[i].to_numpy(), c_pxy.columns[j].to_numpy()) + self.copula(c_pxy.columns[i-1].to_numpy(), c_pxy.columns[j-1].to_numpy()) - self.copula(c_pxy.columns[i-1].to_numpy(), c_pxy.columns[j].to_numpy()) - self.copula(c_pxy.columns[i].to_numpy(), c_pxy.columns[j-1].to_numpy())
+            self.p_xy[(a_x, a_y)] = self.copula(c_pxy[c_pxy.columns[i]].to_numpy(), c_pxy[c_pxy.columns[j]].to_numpy()) + self.copula(c_pxy[c_pxy.columns[i-1]].to_numpy(), c_pxy[c_pxy.columns[j-1]].to_numpy()) - self.copula(c_pxy[c_pxy.columns[i-1]].to_numpy(), c_pxy[c_pxy.columns[j]].to_numpy()) - self.copula(c_pxy[c_pxy.columns[i]].to_numpy(), c_pxy[c_pxy.columns[j-1]].to_numpy())
             
 
         full_events_x = []
@@ -167,4 +174,4 @@ class RobustCredalSetBivariate:
             self.approximation.loc[(x, y), "P_inf"] = np.round(p_inf.min(), 6)
             
             ind = p_inf.argmin()
-            self.approximation.loc[(x, y), "P"] = ", ".join(c_pxy.loc[ind, ["P_" + str(a_x) for a_x in self.order_x_p.index]].astype(dtype=str)) + " | " ", ".join(c_pxy.loc[ind, ["P_" + str(a_y) for a_y in self.order_y_p.index]].astype(dtype=str))
+            self.approximation.loc[(x, y), "P"] = ", ".join(c_pxy.loc[ind, ["P_" + str(a_x) for a_x in self.order_x_p.index]].round(6).astype(dtype=str)) + " | " +  ", ".join(c_pxy.loc[ind, ["P_" + str(a_y) for a_y in self.order_y_p.index]].round(6).astype(dtype=str))
