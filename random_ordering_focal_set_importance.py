@@ -10,7 +10,8 @@ import logging
 
 from copulas import min_copula, lukaciewicz_copula, frank_copula, ali_mikhail_haq_copula, clayton_copula, gumbel_copula
 from necessity_functions import NecessityUnivariate, NecessityBivariate
-from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate, IndexSampling
+from robust_set_sampling import RobustCredalSetUnivariate, RobustCredalSetBivariate 
+
 
 def random_generator_poss(keys: list, seed=1) -> dict:
     rng = default_rng(seed)
@@ -150,9 +151,8 @@ if __name__ == "__main__":
         nec_y_vanilla = NecessityUnivariate(poss_y)
         rob_y = RobustCredalSetUnivariate(nec_y_vanilla, samples_per_interval=5)
 
-        rob_xy = RobustCredalSetBivariate(rob_x, rob_y, order_x_precise, order_y_precise, copula)
         logging.info("Computing robust credal set...")
-        rob_xy.approximate_robust_credal_set()
+        rob_xy = RobustCredalSetBivariate(rob_x, rob_y, order_x_precise, order_y_precise, copula)
 
         flag_order_work = False
 
