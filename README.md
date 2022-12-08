@@ -15,4 +15,4 @@ And the different notebooks:
 - `dataframe_analysis.ipynb` Plot figures to visualize marginal necessities and index processing to be sure that we consider the same marginals when comparing different copulas.
 
 ## Requirements
-`pandas>=1.2.0' for using `pd.DataFrame.merge(_, how='cross')'
+`pandas>=1.2.0` for using `pd.DataFrame.merge(df, how='cross')`
