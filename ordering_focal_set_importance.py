@@ -41,7 +41,7 @@ def generator_poss(keys: list) -> dict:
 
 if __name__ == "__main__":
     
-    resume_computation = False
+    resume_computation = True
     
     output_dir = sys.argv[1] 
     output_file = sys.argv[2] 
@@ -124,41 +124,50 @@ if __name__ == "__main__":
     if resume_computation:
         df = pd.read_csv(os.path.join(output_dir, output_file), header=[0,1], index_col=[0,1])
         n_resume = max(df.index.get_level_values(level="poss"))
+        poss_x_mem = {k: df.loc[(n_resume, 0), ("poss", k)] for k in x_space}
+        poss_y_mem = {k: df.loc[(n_resume, 0), ("poss", k)] for k in y_space}
         del df
-        logging.info("Resuming at possibility number %s" % n_resume) 
+        logging.info("Resuming at possibilities number %s" % n_resume) 
     else:
         # Initializing the output file
         final_df.to_csv(os.path.join(output_dir, output_file))
-
-        n_resume = -1
-    
         logging.info("Starting at possibility number %s" % 0) 
     
     n_poss= -1
     
-    
     for poss_x in possibilities_x:
+        
+        if resume_computation and poss_x!=poss_x_mem:
+            continue
+        
         logging.info("Poss X: " + str(poss_x)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
         if flag_skip:
             logging.info("Skipping this possibility")
             continue
-        
+
         # Finding focal sets
         nec_x_vanilla = NecessityUnivariate(poss_x)
         rob_x = RobustCredalSetUnivariate(nec_x_vanilla, samples_per_interval=10)
         
         for poss_y in possibilities_y:
+            if resume_computation:
+                if poss_y!=poss_y_mem:
+                    continue
+                else:
+                    resume_computation = False
+                    n_poss = n_resume - 1  # Because we will increment it just after the tests
+                    
             logging.info("Poss Y: " + str(poss_y)) 
             flag_skip = np.all([k==0. or k==1. for k in poss_y.values()])
             if flag_skip:
                 logging.info("Skipping this possibility")
                 flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
                 continue
-             
+            
             # Now that we have a valid poss_x and poss_y
             n_poss += 1
-
+            
             # Finding focal sets
             nec_y_vanilla = NecessityUnivariate(poss_y)
             rob_y = RobustCredalSetUnivariate(nec_y_vanilla, samples_per_interval=10)

@@ -111,22 +111,23 @@ if __name__ == "__main__":
     if resume_computation:
         df = pd.read_csv(os.path.join(output_dir, output_file), header=[0,1], index_col=[0,1])
         n_resume = max(df.index.get_level_values(level="poss"))
+        poss_x_mem = {k: df.loc[(n_resume, 0), ("poss", k)] for k in x_space}
+        poss_y_mem = {k: df.loc[(n_resume, 0), ("poss", k)] for k in y_space}
         del df
-        logging.info("Resuming at possibility number %s" % n_resume) 
+        logging.info("Resuming at possibilities number %s" % n_resume) 
     else:
         # Initializing the output file
         final_df.to_csv(os.path.join(output_dir, output_file))
-
-        n_resume = -1
-    
         logging.info("Starting at possibility number %s" % 0) 
     
     n_poss= -1
     
     for poss_x, poss_y in zip(possibilities_x, possibilities_y):
-        if n_poss < n_resume:
-            n_poss += 1
+        if resume_computation and poss_x!=poss_x_mem and poss_y!=poss_y_mem:
             continue
+        
+        resume_computation = False
+        n_poss = n_resume - 1  # Because we will increment it just after the tests
 
         logging.info("Poss X: " + str(poss_x)) 
         flag_skip = np.all([k==0. or k==1. for k in poss_x.values()])
