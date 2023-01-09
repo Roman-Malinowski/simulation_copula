@@ -175,3 +175,5 @@ class RobustCredalSetBivariate:
             
             ind = p_inf.argmin()
             self.approximation.loc[(x, y), "P"] = ", ".join(c_pxy.loc[ind, ["P_" + str(a_x) for a_x in self.order_x_p.index]].round(6).astype(dtype=str)) + " | " +  ", ".join(c_pxy.loc[ind, ["P_" + str(a_y) for a_y in self.order_y_p.index]].round(6).astype(dtype=str))
+
+            
